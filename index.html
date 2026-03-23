@@ -576,8 +576,6 @@
     .sparkline-wrap {
       margin-top: 14px;
       position: relative;
-      border-top: 1px solid var(--border-dim);
-      padding-top: 12px;
     }
 
     .sparkline-svg {
@@ -651,9 +649,9 @@
 <nav>
   <div class="nav-brand">🏄 Surf AI V3</div>
   <div class="nav-tabs">
-    <button class="nav-tab active" onclick="showPage('dashboard', this)">Dashboard</button>
-    <button class="nav-tab" onclick="showPage('wave', this)">Våganalys</button>
-    <button class="nav-tab" onclick="showPage('method', this)">Metodik</button>
+    <button class="nav-tab active" onclick="showPage('dashboard')">Dashboard</button>
+    <button class="nav-tab" onclick="showPage('wave')">Våganalys</button>
+    <button class="nav-tab" onclick="showPage('method')">Metodik</button>
   </div>
   <button class="nav-refresh" onclick="loadAll()">↻ Uppdatera</button>
 </nav>
@@ -738,11 +736,11 @@
       <p>Period är den viktigaste parametern – en äkta groundswell med 12+ sekunder ger nästan dubbelt så högt grundvärde som en lokal vindsjö med 6 sekunder, oavsett våghöjd. Onshorestraffet är multiplicativt: stark onshore (8 m/s) kan ta bort upp till 35 poäng.</p>
       <p>Spot-specifika idealriktningar för swell och vind bygger på lokal geografi och din erfarenhet av varje plats:</p>
       <div class="formula-box">
-        Apelviken : swell SW–V (225–270°)   · offshore NNO/O<br>
-        Ringenäs  : swell V (270°)           · offshore O<br>
-        Tylösand  : swell V–NV (270–315°)   · offshore NNO<br>
-        Skäret    : swell V (270°)           · offshore O/SO<br>
-        Mölle     : swell NV–N (315–360°)   · offshore O/SO
+        Apelviken : swell SW/V  · offshore NNO/O<br>
+        Ringenäs  : swell V     · offshore O<br>
+        Tylösand  : swell SW/V  · offshore NNO<br>
+        Skäret    : swell V/NV  · offshore O/SO<br>
+        Mölle     : swell NV/V  · offshore O/SO
       </div>
     </div>
 
@@ -796,21 +794,14 @@ const SPOTS = [
 // ════════════════════════════════════════
 
 const SPOT_CONFIG = {
-  // goodSwell : grader VARIFRÅN swellen kommer (meteorologisk konvention)
-  // Apelviken – SW till V, öppen mot Kattegatt sydvästlig swell
-  apelviken: { goodSwell: [225, 247, 270],  offshore: [45, 90],   onshore: [225, 270] },
-
-  // Ringenäs – rakt västlig swell
+  // goodSwell : degrees FROM which swell ideally arrives (meteorological)
+  // offshore  : wind FROM these degrees = offshore = good
+  // onshore   : wind FROM these degrees = onshore  = bad
+  apelviken: { goodSwell: [225, 270],       offshore: [45, 90],   onshore: [225, 270] },
   ringenas:  { goodSwell: [270],            offshore: [90],       onshore: [270]      },
-
-  // Tylösand – V till NV, bäst på väst-nordväst ~292°
-  tylosand:  { goodSwell: [270, 292, 315],  offshore: [45],       onshore: [225, 270] },
-
-  // Skäret – rakt västlig swell
-  skaret:    { goodSwell: [270],            offshore: [90, 135],  onshore: [270, 315] },
-
-  // Mölle – NV till N, Kullaberg kräver nordlig swell, optimal ~337°
-  molle:     { goodSwell: [315, 337, 360],  offshore: [90, 135],  onshore: [270, 315] }
+  tylosand:  { goodSwell: [225, 270],       offshore: [45],       onshore: [225, 270] },
+  skaret:    { goodSwell: [270, 315],       offshore: [90, 135],  onshore: [270, 315] },
+  molle:     { goodSwell: [315, 270],       offshore: [90, 135],  onshore: [270, 315] }
 };
 
 // Angular distance between two compass degrees (0-180)
@@ -933,9 +924,9 @@ async function fetchSMHI(lat, lon) {
 }
 
 async function fetchMarine(lat, lon) {
-  const today    = new Date().toISOString().split('T')[0];
-  const twoDays  = new Date(Date.now() + 2 * 86400000).toISOString().split('T')[0];
-  const url = `https://marine-api.open-meteo.com/v1/marine?latitude=${lat}&longitude=${lon}&hourly=wave_height,wave_period,sea_surface_temperature&start_date=${today}&end_date=${twoDays}&timezone=Europe%2FStockholm`;
+  const today = new Date().toISOString().split('T')[0];
+  const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
+  const url = `https://marine-api.open-meteo.com/v1/marine?latitude=${lat}&longitude=${lon}&hourly=wave_height,wave_period,sea_surface_temperature&start_date=${today}&end_date=${tomorrow}&timezone=Europe%2FStockholm`;
   const r = await fetch(url);
   if (!r.ok) throw new Error(`Marine ${r.status}`);
   const d = await r.json();
@@ -994,33 +985,22 @@ async function loadSpot(spot) {
   const [smhi, marine] = await Promise.all([fetchSMHI(spot.lat, spot.lon), fetchMarine(spot.lat, spot.lon)]);
   const best = findBestHour(smhi, marine, spot.key);
 
-  // Build 48h hourly series for bar chart – wave, period, wind, score
+  // Build hourly score series for today 06-22 for sparkline
   const now = new Date();
-  const today    = now.toISOString().split('T')[0];
-  const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
+  const today = now.toISOString().split('T')[0];
   const hourly = [];
-
   marine.times.forEach((t, i) => {
-    const dateStr = t.split('T')[0];
-    if (dateStr !== today && dateStr !== tomorrow) return;
-    const h  = new Date(t).getHours();
-    const wh = marine.heights[i];
-    const wp = marine.periods[i];
+    if (!t.startsWith(today)) return;
+    const h = new Date(t).getHours();
+    if (h < 6 || h > 22) return;
+    const wh = marine.heights[i], wp = marine.periods[i];
     if (wh == null || wp == null) return;
     const s = smhi.reduce((p, c) =>
       Math.abs(new Date(c.time) - new Date(t)) < Math.abs(new Date(p.time) - new Date(t)) ? c : p
     );
     const dirRad = (s.dir || 0) * Math.PI / 180;
     const { score } = calcScore(spot.key, { wave: wh, wind: s.wind, period: wp, dir: dirRad, swellDir: null });
-    hourly.push({
-      t,                          // full ISO timestamp
-      date: dateStr,              // 'YYYY-MM-DD' for day separator
-      h,                          // hour 0-23
-      wave: wh,                   // wave height m
-      period: wp,                 // wave period s
-      wind: s.wind || 0,          // wind speed m/s
-      score                       // 0-100
-    });
+    hourly.push({ h, score, dir: s.dir || 0 });
   });
 
   // current wind direction (closest to now)
@@ -1063,142 +1043,129 @@ function renderSkeletons() {
 }
 
 // ════════════════════════════════════════
-//  WAVE BAR CHART – 48h prognos
-//  Staplar = våghöjd, färg = score-kvalitet
-//  Dagsgräns, NU-linje, bästa-timme-markering
+//  SPARKLINE
 // ════════════════════════════════════════
-function buildSparkline(hourly, bestHour) {
-  if (!hourly || hourly.length < 2) {
-    return '<div style="height:90px;color:var(--muted);font-size:0.7rem;display:flex;align-items:center">Ingen prognos tillgänglig</div>';
-  }
+function buildSparkline(hourly) {
+  if (!hourly || hourly.length < 2) return '<div style="height:72px;color:var(--muted);font-size:0.7rem;display:flex;align-items:center">Ingen tidsserie</div>';
 
-  const W = 300, H = 90;
-  const PADX = 4, PADY_TOP = 22, PADY_BOT = 18;
-  const plotW = W - PADX * 2;
+  // Canvas dimensions – taller so peak label fits above line
+  const W = 280, H = 68, PADX = 6, PADY_TOP = 18, PADY_BOT = 16;
   const plotH = H - PADY_TOP - PADY_BOT;
+  const plotW = W - PADX * 2;
 
-  const n       = hourly.length;
-  const barW    = Math.max(2, (plotW / n) - 1);
-  const gap     = plotW / n;
+  const scores = hourly.map(d => d.score);
+  const minS = Math.max(0, Math.min(...scores) - 0.5);
+  const maxS = Math.max(...scores) + 0.3;
+  const sRange = maxS - minS || 1;
 
-  const maxWave = Math.max(...hourly.map(d => d.wave), 0.5);
-  const now     = new Date();
-  const nowMs   = now.getTime();
+  const hours  = hourly.map(d => d.h);
+  const minH   = hours[0], maxH = hours[hours.length - 1];
+  const hRange = maxH - minH || 1;
 
-  // Find today/tomorrow boundary index
-  const today = now.toISOString().split('T')[0];
+  const nowHour = new Date().getHours();
 
-  // Find best score index for annotation
-  const bestScoreIdx = hourly.reduce((bi, d, i) => d.score > hourly[bi].score ? i : bi, 0);
+  // x/y mappers
+  const px = h     => PADX + ((h - minH) / hRange) * plotW;
+  const py = score => PADY_TOP + (1 - (score - minS) / sRange) * plotH;
 
-  // x centre of bar i
-  const bx = i => PADX + i * gap + gap / 2;
-  // bar height in px
-  const bh = wave => Math.max(2, (wave / maxWave) * plotH);
-  // bar top y
-  const by = wave => PADY_TOP + plotH - bh(wave);
+  const pts = hourly.map(d => ({ x: px(d.h), y: py(d.score), score: d.score, h: d.h }));
 
-  // Bar colour by score
-  function barColor(score, isNight) {
-    if (isNight) return 'rgba(14,74,114,0.5)';
-    if (score >= 55) return '#22c55e';
-    if (score >= 35) return '#f59e0b';
-    return '#ef4444';
+  // Smooth path via cubic bezier
+  function smoothPath(points) {
+    if (points.length < 2) return '';
+    let d = `M${points[0].x.toFixed(1)},${points[0].y.toFixed(1)}`;
+    for (let i = 1; i < points.length; i++) {
+      const p0 = points[i - 1], p1 = points[i];
+      const cpx = (p0.x + p1.x) / 2;
+      d += ` C${cpx.toFixed(1)},${p0.y.toFixed(1)} ${cpx.toFixed(1)},${p1.y.toFixed(1)} ${p1.x.toFixed(1)},${p1.y.toFixed(1)}`;
+    }
+    return d;
   }
 
-  // Build bars
-  let bars = '';
-  let dayLabels = '';
-  let seenDates = {};
+  const lineD = smoothPath(pts);
+  const last  = pts[pts.length - 1];
+  const first = pts[0];
+  const areaD = lineD + ` L${last.x.toFixed(1)},${H - PADY_BOT} L${first.x.toFixed(1)},${H - PADY_BOT} Z`;
 
-  hourly.forEach((d, i) => {
-    const isNight = d.h < 6 || d.h > 21;
-    const x = bx(i);
-    const h = bh(d.wave);
-    const y = by(d.wave);
-    const col = barColor(d.score, isNight);
-    const isBest = (i === bestScoreIdx && !isNight);
-    const isPast = new Date(d.t).getTime() < nowMs;
+  // Peak
+  const peak    = Math.max(...scores);
+  const bestIdx = scores.indexOf(peak);
+  const bp      = pts[bestIdx];
+  const color   = peak > 7 ? '#22c55e' : peak > 5 ? '#f59e0b' : '#ef4444';
+  const glowId  = `glow_${minH}_${maxH}`;
+  const gradId  = `grad_${minH}_${maxH}`;
 
-    // Fade past bars
-    const opacity = isPast ? 0.35 : 1;
+  // "Now" line
+  const nowX    = px(nowHour);
+  const showNow = nowHour >= minH && nowHour <= maxH;
 
-    bars += `<rect x="${(x - barW/2).toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${h.toFixed(1)}"
-      fill="${col}" opacity="${opacity}" rx="1"/>`;
+  // Hour axis ticks – every 3h, but always include first and last
+  const tickSet = new Set([minH, maxH]);
+  hourly.forEach(d => { if (d.h % 3 === 0) tickSet.add(d.h); });
+  const ticks = [...tickSet].sort((a, b) => a - b);
 
-    // Best-hour glow + label
-    if (isBest) {
-      bars += `<rect x="${(x - barW/2 - 1).toFixed(1)}" y="${(y-1).toFixed(1)}" width="${(barW+2).toFixed(1)}" height="${(h+2).toFixed(1)}"
-        fill="none" stroke="${col}" stroke-width="1.5" rx="2" opacity="0.8"/>`;
-      const labelAnchor = x > W * 0.7 ? 'end' : x < W * 0.3 ? 'start' : 'middle';
-      const lx = x > W * 0.7 ? x - 3 : x < W * 0.3 ? x + 3 : x;
-      bars += `<text x="${lx.toFixed(1)}" y="${(y - 5).toFixed(1)}"
-        text-anchor="${labelAnchor}" font-family="Orbitron,sans-serif"
-        font-size="7" font-weight="700" fill="${col}">${d.wave.toFixed(1)}m @ ${d.h.toString().padStart(2,'0')}:00</text>`;
-    }
+  // Peak label – flip to right if peak is in left half
+  const labelAnchor = bp.x < W / 2 ? 'start' : 'end';
+  const labelX      = bp.x < W / 2 ? bp.x + 5 : bp.x - 5;
 
-    // Hour tick every 3h (skip 00, 03 – too cluttered at night)
-    if (d.h % 6 === 0 && d.h > 0) {
-      bars += `<text x="${x.toFixed(1)}" y="${H - 3}" text-anchor="middle"
-        font-family="Orbitron,sans-serif" font-size="6" fill="rgba(77,122,150,0.75)">${d.h.toString().padStart(2,'0')}</text>`;
-    }
+  return `
+  <svg class="sparkline-svg" viewBox="0 0 ${W} ${H}" style="height:${H}px;overflow:visible">
+    <defs>
+      <linearGradient id="${gradId}" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%"   stop-color="${color}" stop-opacity="0.45"/>
+        <stop offset="100%" stop-color="${color}" stop-opacity="0.02"/>
+      </linearGradient>
+      <filter id="${glowId}" x="-50%" y="-50%" width="200%" height="200%">
+        <feGaussianBlur stdDeviation="2.5" result="blur"/>
+        <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+      </filter>
+    </defs>
 
-    // Day boundary line + label (first occurrence of each date)
-    if (!seenDates[d.date]) {
-      seenDates[d.date] = true;
-      if (d.date !== today) {
-        // Vertical day separator
-        const sepX = (x - gap / 2).toFixed(1);
-        bars += `<line x1="${sepX}" y1="${PADY_TOP}" x2="${sepX}" y2="${H - PADY_BOT}"
-          stroke="rgba(0,180,216,0.25)" stroke-width="1" stroke-dasharray="3 2"/>`;
-      }
-      // Date label at top
-      const dateObj = new Date(d.date + 'T12:00:00');
-      const dayName = d.date === today ? 'IDAG' :
-        ['SÖN','MÅN','TIS','ONS','TOR','FRE','LÖR'][dateObj.getDay()];
-      dayLabels += `<text x="${x.toFixed(1)}" y="10" text-anchor="start"
-        font-family="Orbitron,sans-serif" font-size="6.5" font-weight="700"
-        fill="${d.date === today ? '#00b4d8' : 'rgba(77,122,150,0.9)'}"
-        letter-spacing="0.08em">${dayName}</text>`;
-    }
-  });
+    <!-- Baseline -->
+    <line x1="${PADX}" y1="${H - PADY_BOT}" x2="${W - PADX}" y2="${H - PADY_BOT}"
+          stroke="rgba(14,74,114,0.5)" stroke-width="1"/>
 
-  // "NU" vertical line – find closest bar to now
-  const nowIdx = hourly.reduce((ci, d, i) =>
-    Math.abs(new Date(d.t).getTime() - nowMs) < Math.abs(new Date(hourly[ci].t).getTime() - nowMs) ? i : ci, 0);
-  const nowX = bx(nowIdx).toFixed(1);
-  const nowLine = `
-    <line x1="${nowX}" y1="${PADY_TOP}" x2="${nowX}" y2="${H - PADY_BOT}"
-      stroke="rgba(0,180,216,0.55)" stroke-width="1.2" stroke-dasharray="3 2"/>
-    <text x="${nowX}" y="${PADY_TOP - 4}" text-anchor="middle"
-      font-family="Orbitron,sans-serif" font-size="6.5" font-weight="700"
-      fill="rgba(0,180,216,0.8)">NU</text>`;
+    <!-- Hour tick marks + labels -->
+    ${ticks.map(h => {
+      const tx = px(h);
+      const isEdge = (h === minH || h === maxH);
+      return `
+      <line x1="${tx.toFixed(1)}" y1="${H - PADY_BOT}" x2="${tx.toFixed(1)}" y2="${H - PADY_BOT + 3}"
+            stroke="rgba(14,74,114,0.7)" stroke-width="1"/>
+      <text x="${tx.toFixed(1)}" y="${H - 2}" text-anchor="middle"
+            font-family="Orbitron,sans-serif" font-size="6.5" fill="${isEdge ? 'rgba(77,122,150,1)' : 'rgba(77,122,150,0.8)'}"
+            letter-spacing="0.03em">${h.toString().padStart(2,'0')}</text>`;
+    }).join('')}
 
-  // Y-axis wave height labels
-  const yLabels = [0.25, 0.5, 0.75, 1.0].map(frac => {
-    const val = (frac * maxWave);
-    if (val < 0.1) return '';
-    const yPos = PADY_TOP + plotH - frac * plotH;
-    return `<text x="${PADX}" y="${yPos.toFixed(1)}" dominant-baseline="middle"
-      font-family="Orbitron,sans-serif" font-size="5.5" fill="rgba(77,122,150,0.6)"
-      text-anchor="start">${val.toFixed(1)}</text>
-    <line x1="${PADX + 14}" y1="${yPos.toFixed(1)}" x2="${W - PADX}" y2="${yPos.toFixed(1)}"
-      stroke="rgba(14,74,114,0.18)" stroke-width="0.5"/>`;
-  }).join('');
+    <!-- "Now" indicator -->
+    ${showNow ? `
+    <line x1="${nowX.toFixed(1)}" y1="${PADY_TOP - 4}" x2="${nowX.toFixed(1)}" y2="${H - PADY_BOT}"
+          stroke="rgba(0,180,216,0.4)" stroke-width="1" stroke-dasharray="3 2"/>
+    <text x="${nowX.toFixed(1)}" y="${PADY_TOP - 6}" text-anchor="middle"
+          font-family="Orbitron,sans-serif" font-size="6" fill="rgba(0,180,216,0.6)">NU</text>` : ''}
 
-  // Baseline
-  const baseline = `<line x1="${PADX}" y1="${PADY_TOP + plotH}" x2="${W - PADX}" y2="${PADY_TOP + plotH}"
-    stroke="rgba(14,74,114,0.5)" stroke-width="1"/>`;
+    <!-- Area fill -->
+    <path d="${areaD}" fill="url(#${gradId})"/>
 
-  return `<svg class="sparkline-svg" viewBox="0 0 ${W} ${H}"
-    style="height:${H}px;width:100%;overflow:visible">
-    ${yLabels}
-    ${baseline}
-    ${bars}
-    ${nowLine}
-    ${dayLabels}
+    <!-- Main line -->
+    <path d="${lineD}" fill="none" stroke="${color}" stroke-width="2.2"
+          stroke-linecap="round" stroke-linejoin="round"/>
+
+    <!-- Peak glow halo -->
+    <circle cx="${bp.x.toFixed(1)}" cy="${bp.y.toFixed(1)}" r="6"
+            fill="${color}" opacity="0.18"/>
+
+    <!-- Peak dot -->
+    <circle cx="${bp.x.toFixed(1)}" cy="${bp.y.toFixed(1)}" r="3.5"
+            fill="${color}" stroke="#040d18" stroke-width="1.8"
+            filter="url(#${glowId})"/>
+
+    <!-- Peak score label -->
+    <text x="${labelX.toFixed(1)}" y="${(bp.y - 7).toFixed(1)}"
+          text-anchor="${labelAnchor}"
+          font-family="Orbitron,sans-serif" font-size="7.5" font-weight="700"
+          fill="${color}" letter-spacing="0.04em">${peak.toFixed(1)} @ ${bp.h.toString().padStart(2,'0')}:00</text>
   </svg>`;
-}
 }
 
 // ════════════════════════════════════════
@@ -1265,9 +1232,8 @@ function renderDashboard(results) {
     const b = r.best;
     if (!b) return `<div class="spot-card"><div class="spot-title">${r.label}</div><p style="color:var(--muted);font-size:0.8rem;margin-top:10px">Ingen data tillgänglig</p></div>`;
 
-    const ql    = q(b.score, b.label);
-    const pct   = b.score; // already 0-100
-    const delay = idx * 0.07;
+    const ql  = q(b.score, b.label);
+    const pct = b.score; // already 0-100
 
     const reasonsHtml = b.reasons && b.reasons.length
       ? `<div class="reasons-list">${b.reasons.map(r => `<span class="reason-chip">${r}</span>`).join('')}</div>`
@@ -1401,11 +1367,11 @@ function renderWavePage(results) {
 // ════════════════════════════════════════
 //  PAGE NAV
 // ════════════════════════════════════════
-function showPage(id, btn) {
+function showPage(id) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
   document.getElementById('page-' + id).classList.add('active');
-  if (btn) btn.classList.add('active');
+  event.target.classList.add('active');
 }
 
 // ════════════════════════════════════════
