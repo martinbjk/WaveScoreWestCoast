@@ -1121,7 +1121,7 @@ function buildSpotResult(spot, smhi, marine) {
 
     return {
       t,
-      h: new Date(t).getHours(),
+      hour: new Date(t).getHours(),
       wave: wh,
       period: wp,
       wind: s.wind || 0,
