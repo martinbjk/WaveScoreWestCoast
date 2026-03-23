@@ -1270,9 +1270,9 @@ function renderSkeletons() {
 //  Dagsgräns, NU-linje, bästa-timme-markering
 // ════════════════════════════════════════
 function buildSparkline(hourly, bestHour) {
-  if (!hourly || hourly.length < 2) {
-    return '<div style="height:90px;color:var(--muted);font-size:0.7rem;display:flex;align-items:center">Ingen prognos tillgänglig</div>';
-  }
+  if (!hourly || hourly.length === 0) {
+  return '<div style="color:var(--muted);font-size:0.7rem">Ingen prognos</div>';
+}
 
   const W = 300, H = 90;
   const PADX = 4, PADY_TOP = 22, PADY_BOT = 18;
@@ -1546,7 +1546,7 @@ function renderDashboard(results, partial = false) {
       ${cacheBadge}
 
       <div class="sparkline-wrap">
-        ${buildSparkline(r.hourly)}
+        ${buildSparkline(r.hourly, r.best?.hour)}
       </div>
     </div>`;
   }).join('');
