@@ -636,20 +636,6 @@
 
     .header-left { display: flex; flex-direction: column; gap: 5px; }
 
-    /* ── Cache badge ── */
-    .cache-badge {
-      font-family: 'Exo 2', sans-serif;
-      font-size: 0.58rem;
-      color: var(--muted2);
-      background: rgba(14,74,114,0.18);
-      border: 1px solid var(--border-dim);
-      border-radius: 4px;
-      padding: 2px 6px;
-      letter-spacing: 0.04em;
-      margin-top: 8px;
-      display: inline-block;
-    }
-
     /* mobile */
     @media (max-width: 500px) {
       .spots-grid { grid-template-columns: 1fr; padding: 10px 12px 30px; }
@@ -669,7 +655,7 @@
     <button class="nav-tab" onclick="showPage('wave', this)">Våganalys</button>
     <button class="nav-tab" onclick="showPage('method', this)">Metodik</button>
   </div>
-  <button class="nav-refresh" onclick="loadAll(true)" title="Rensa cache och hämta ny data">↻ Uppdatera</button>
+  <button class="nav-refresh" onclick="loadAll()">↻ Uppdatera</button>
 </nav>
 
 <!-- ════ PAGE: DASHBOARD ════ -->
@@ -927,98 +913,32 @@ const MODELS = {
   molle:     d => calcScore('molle',     d).score,
 };
 
-// ════════════════════════════════════════
-//  CACHE  (localStorage, 30 min TTL)
-// ════════════════════════════════════════
-const CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
-
-const Cache = {
-  key(spotKey) { return `surfai_v3_${spotKey}`; },
-
-  get(spotKey) {
-    try {
-      const raw = localStorage.getItem(this.key(spotKey));
-      if (!raw) return null;
-      const { ts, data } = JSON.parse(raw);
-      if (Date.now() - ts > CACHE_TTL_MS) { this.del(spotKey); return null; }
-      return data;
-    } catch { return null; }
-  },
-
-  set(spotKey, data) {
-    try {
-      localStorage.setItem(this.key(spotKey), JSON.stringify({ ts: Date.now(), data }));
-    } catch (e) {
-      // localStorage full or blocked – silently ignore
-      console.warn('Cache write failed:', e.message);
-    }
-  },
-
-  del(spotKey) {
-    try { localStorage.removeItem(this.key(spotKey)); } catch {}
-  },
-
-  // Return age in minutes for a cached entry, or null
-  ageMinutes(spotKey) {
-    try {
-      const raw = localStorage.getItem(this.key(spotKey));
-      if (!raw) return null;
-      const { ts } = JSON.parse(raw);
-      return Math.round((Date.now() - ts) / 60000);
-    } catch { return null; }
-  },
-
-  clearAll() {
-    SPOTS.forEach(s => this.del(s.key));
-  }
-};
-
-// In-memory results store
+// Cache for all spot data
 let allData = {};
-
-// ════════════════════════════════════════
-//  RETRY FETCH  (3 attempts, exp backoff)
-// ════════════════════════════════════════
-async function fetchWithRetry(url, label, maxTries = 3) {
-  let lastErr;
-  for (let attempt = 1; attempt <= maxTries; attempt++) {
-    try {
-      const controller = new AbortController();
-      const timeoutId  = setTimeout(() => controller.abort(), 10000); // 10 s timeout
-      const r = await fetch(url, { signal: controller.signal });
-      clearTimeout(timeoutId);
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      return await r.json();
-    } catch (err) {
-      lastErr = err;
-      if (attempt < maxTries) {
-        const delay = 800 * Math.pow(2, attempt - 1); // 800ms, 1600ms
-        await new Promise(res => setTimeout(res, delay));
-      }
-    }
-  }
-  throw new Error(`${label} misslyckades efter ${maxTries} försök: ${lastErr.message}`);
-}
 
 // ════════════════════════════════════════
 //  API
 // ════════════════════════════════════════
 async function fetchSMHI(lat, lon) {
   const url = `https://opendata-download-metfcst.smhi.se/api/category/pmp3g/version/2/geotype/point/lon/${lon}/lat/${lat}/data.json`;
-  const d = await fetchWithRetry(url, 'SMHI');
+  const r = await fetch(url);
+  if (!r.ok) throw new Error(`SMHI ${r.status}`);
+  const d = await r.json();
   return d.timeSeries.map(ts => ({
-    time: ts.validTime,
-    wind: (ts.parameters.find(p => p.name === 'ws') || { values: [0] }).values[0],
-    dir:  (ts.parameters.find(p => p.name === 'wd') || { values: [0] }).values[0],
-    temp: (ts.parameters.find(p => p.name === 't')  || { values: [null] }).values[0]
+    time:  ts.validTime,
+    wind:  ts.parameters.find(p => p.name === 'ws').values[0],
+    dir:   ts.parameters.find(p => p.name === 'wd').values[0],
+    temp:  (ts.parameters.find(p => p.name === 't') || { values: [null] }).values[0]
   }));
 }
 
 async function fetchMarine(lat, lon) {
-  const today   = new Date().toISOString().split('T')[0];
-  const twoDays = new Date(Date.now() + 2 * 86400000).toISOString().split('T')[0];
+  const today    = new Date().toISOString().split('T')[0];
+  const twoDays  = new Date(Date.now() + 2 * 86400000).toISOString().split('T')[0];
   const url = `https://marine-api.open-meteo.com/v1/marine?latitude=${lat}&longitude=${lon}&hourly=wave_height,wave_period,sea_surface_temperature&start_date=${today}&end_date=${twoDays}&timezone=Europe%2FStockholm`;
-  const d = await fetchWithRetry(url, 'Open-Meteo Marine');
+  const r = await fetch(url);
+  if (!r.ok) throw new Error(`Marine ${r.status}`);
+  const d = await r.json();
   return {
     times:   d.hourly.time,
     heights: d.hourly.wave_height,
@@ -1038,10 +958,7 @@ function findBestHour(smhi, marine, spotKey) {
   marine.times.forEach((t, i) => {
     const dt = new Date(t);
     const h = dt.getHours();
-    const rawWave = marine.heights[i];
-const factor = WAVE_SPOT_FACTOR[spot.key] || 0.3;
-const wh = rawWave * factor;
-    const effectiveWind = d.wind > 12 ? 12 : d.wind;
+    const wh = marine.heights[i];
     const wp = marine.periods[i];
     const wt = marine.seaTemp[i];
     if (wh == null || wp == null) return;
@@ -1073,15 +990,15 @@ const wh = rawWave * factor;
 // ════════════════════════════════════════
 //  LOAD
 // ════════════════════════════════════════
-// ════════════════════════════════════════
-//  BUILD SPOT RESULT from raw API data
-// ════════════════════════════════════════
-function buildSpotResult(spot, smhi, marine) {
+async function loadSpot(spot) {
+  const [smhi, marine] = await Promise.all([fetchSMHI(spot.lat, spot.lon), fetchMarine(spot.lat, spot.lon)]);
   const best = findBestHour(smhi, marine, spot.key);
-  const now  = new Date();
+
+  // Build 48h hourly series for bar chart – wave, period, wind, score
+  const now = new Date();
   const today    = now.toISOString().split('T')[0];
   const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
-  const hourly   = [];
+  const hourly = [];
 
   marine.times.forEach((t, i) => {
     const dateStr = t.split('T')[0];
@@ -1094,168 +1011,41 @@ function buildSpotResult(spot, smhi, marine) {
       Math.abs(new Date(c.time) - new Date(t)) < Math.abs(new Date(p.time) - new Date(t)) ? c : p
     );
     const dirRad = (s.dir || 0) * Math.PI / 180;
-    const { score } = calcScore(spot.key, { wave: wh, wind: s.wind || 0, period: wp, dir: dirRad, swellDir: null });
-    hourly.push({ t, date: dateStr, h, wave: wh, period: wp, wind: s.wind || 0, score });
+    const { score } = calcScore(spot.key, { wave: wh, wind: s.wind, period: wp, dir: dirRad, swellDir: null });
+    hourly.push({
+      t,                          // full ISO timestamp
+      date: dateStr,              // 'YYYY-MM-DD' for day separator
+      h,                          // hour 0-23
+      wave: wh,                   // wave height m
+      period: wp,                 // wave period s
+      wind: s.wind || 0,          // wind speed m/s
+      score                       // 0-100
+    });
   });
 
+  // current wind direction (closest to now)
   const nowSmhi = smhi.reduce((p, c) =>
     Math.abs(new Date(c.time) - now) < Math.abs(new Date(p.time) - now) ? c : p
   );
+  const windDir = nowSmhi.dir || 0;
 
-  return { ...spot, best, hourly, windDir: nowSmhi.dir || 0 };
+  return { ...spot, best, hourly, windDir };
 }
 
-// ════════════════════════════════════════
-//  LOAD SINGLE SPOT  (cache-first)
-// ════════════════════════════════════════
-async function loadSpot(spot, { forceRefresh = false } = {}) {
-  // 1. Try cache first (unless forced refresh)
-  if (!forceRefresh) {
-    const cached = Cache.get(spot.key);
-    if (cached) {
-      const age = Cache.ageMinutes(spot.key);
-      return { ...cached, fromCache: true, cacheAge: age };
-    }
-  }
-
-  // 2. Fetch fresh data with retry
-  const [smhi, marine] = await Promise.all([
-    fetchSMHI(spot.lat, spot.lon),
-    fetchMarine(spot.lat, spot.lon)
-  ]);
-
-  const result = buildSpotResult(spot, smhi, marine);
-
-  // 3. Store in cache
-  Cache.set(spot.key, result);
-
-  return { ...result, fromCache: false, cacheAge: 0 };
-}
-
-// ════════════════════════════════════════
-//  UPDATE NAV TIMESTAMP
-// ════════════════════════════════════════
-function updateTimestamp(results) {
-  const now    = new Date();
-  const hh     = now.getHours().toString().padStart(2, '0');
-  const mm     = now.getMinutes().toString().padStart(2, '0');
-  const cached = results.filter(r => r.fromCache).length;
-  const live   = results.filter(r => !r.fromCache && !r.error).length;
-  const errors = results.filter(r => r.error).length;
-
-  let label = `Uppdaterad ${hh}:${mm}`;
-  if (cached > 0) label += ` · ${cached} från cache`;
-  if (errors > 0) label += ` · ⚠ ${errors} misslyckades`;
-
-  document.getElementById('last-updated').textContent = label;
-}
-
-// ════════════════════════════════════════
-//  LOAD ALL  (staggered, per-spot errors)
-// ════════════════════════════════════════
-async function loadAll(forceRefresh = false) {
-  if (forceRefresh) Cache.clearAll();
-
+async function loadAll() {
   renderSkeletons();
-  allData = {};
-
-  const results = [];
-  const grid    = document.getElementById('spots-grid');
-
-  // Pre-fill grid with skeleton placeholders keyed by spot
-  grid.innerHTML = SPOTS.map((s, i) =>
-    `<div class="spot-card loading" id="card-${s.key}" style="animation-delay:${i*0.07}s">
-      <div class="spot-title" style="color:var(--muted)">${s.label}</div>
-      <div class="skeleton" style="height:52px;margin:12px 0"></div>
-      <div class="skeleton" style="height:10px"></div>
-    </div>`
-  ).join('');
-
-  // Load each spot independently – one failure won't block others
-  const promises = SPOTS.map(async (spot, idx) => {
-    try {
-      const result = await loadSpot(spot, { forceRefresh });
-      allData[spot.key] = result;
-      results.push(result);
-
-      // Replace skeleton with live card as soon as data arrives
-      const cardEl = document.getElementById(`card-${spot.key}`);
-      if (cardEl) {
-        const sorted = [...results].sort((a, b) => (b.best?.score || 0) - (a.best?.score || 0));
-        renderDashboard(sorted, /* partial= */ true);
-        renderWavePage(sorted);
-      }
-    } catch (err) {
-      const errorResult = { ...spot, error: err.message, best: null, hourly: [], windDir: 0, fromCache: false };
-      results.push(errorResult);
-      allData[spot.key] = errorResult;
-
-      const cardEl = document.getElementById(`card-${spot.key}`);
-      if (cardEl) {
-        cardEl.classList.remove('loading');
-        cardEl.innerHTML = `
-          <div class="spot-title">${spot.label}</div>
-          <div style="color:var(--red);font-size:0.75rem;margin-top:10px">
-            ⚠ Kunde inte hämta data<br>
-            <span style="color:var(--muted);font-size:0.68rem">${err.message}</span>
-          </div>
-          <button onclick="reloadSpot('${spot.key}')" style="
-            margin-top:12px;font-family:'Orbitron',sans-serif;font-size:0.6rem;
-            letter-spacing:0.1em;color:var(--bg);background:var(--blue);
-            border:none;border-radius:6px;padding:6px 12px;cursor:pointer">
-            ↻ Försök igen
-          </button>`;
-      }
-    }
-
-    // Update timestamp after each spot resolves
-    updateTimestamp(results);
-  });
-
-  await Promise.allSettled(promises);
-
-  // Final render pass (sorted by score)
-  const sorted = [...Object.values(allData)].sort((a, b) => (b.best?.score || 0) - (a.best?.score || 0));
-  renderDashboard(sorted);
-  renderWavePage(sorted);
-  updateTimestamp(results);
-}
-
-// ════════════════════════════════════════
-//  RELOAD SINGLE SPOT  (retry button)
-// ════════════════════════════════════════
-async function reloadSpot(spotKey) {
-  const spot   = SPOTS.find(s => s.key === spotKey);
-  if (!spot) return;
-  const cardEl = document.getElementById(`card-${spotKey}`);
-  if (cardEl) {
-    cardEl.classList.add('loading');
-    cardEl.innerHTML = `
-      <div class="spot-title" style="color:var(--muted)">${spot.label}</div>
-      <div class="skeleton" style="height:52px;margin:12px 0"></div>
-      <div class="skeleton" style="height:10px"></div>`;
-  }
   try {
-    Cache.del(spotKey);
-    const result    = await loadSpot(spot, { forceRefresh: true });
-    allData[spotKey] = result;
-    const sorted    = Object.values(allData).sort((a, b) => (b.best?.score || 0) - (a.best?.score || 0));
-    renderDashboard(sorted);
-    renderWavePage(sorted);
-    updateTimestamp(Object.values(allData));
+    const results = await Promise.all(SPOTS.map(loadSpot));
+    allData = {};
+    results.forEach(r => { allData[r.key] = r; });
+    renderDashboard(results);
+    renderWavePage(results);
+    const now = new Date();
+    document.getElementById('last-updated').textContent =
+      `Uppdaterad ${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}`;
   } catch (err) {
-    if (cardEl) {
-      cardEl.classList.remove('loading');
-      cardEl.innerHTML = `
-        <div class="spot-title">${spot.label}</div>
-        <div style="color:var(--red);font-size:0.75rem;margin-top:10px">⚠ ${err.message}</div>
-        <button onclick="reloadSpot('${spotKey}')" style="
-          margin-top:12px;font-family:'Orbitron',sans-serif;font-size:0.6rem;
-          letter-spacing:0.1em;color:var(--bg);background:var(--blue);
-          border:none;border-radius:6px;padding:6px 12px;cursor:pointer">
-          ↻ Försök igen
-        </button>`;
-    }
+    document.getElementById('spots-grid').innerHTML =
+      `<div class="error-box" style="grid-column:1/-1"><strong>⚠ Fel</strong>${err.message}</div>`;
   }
 }
 
@@ -1263,8 +1053,13 @@ async function reloadSpot(spotKey) {
 //  RENDER: SKELETON
 // ════════════════════════════════════════
 function renderSkeletons() {
-  // Skeletons are now rendered inline in loadAll() with per-spot ids.
-  // This function is kept as a fallback no-op.
+  const grid = document.getElementById('spots-grid');
+  grid.innerHTML = SPOTS.map(() => `
+    <div class="spot-card loading">
+      <div class="skeleton" style="width:60%;height:16px;margin-bottom:14px"></div>
+      <div class="skeleton" style="height:52px;margin-bottom:12px"></div>
+      <div class="skeleton" style="height:10px"></div>
+    </div>`).join('');
 }
 
 // ════════════════════════════════════════
@@ -1273,9 +1068,9 @@ function renderSkeletons() {
 //  Dagsgräns, NU-linje, bästa-timme-markering
 // ════════════════════════════════════════
 function buildSparkline(hourly, bestHour) {
-  if (!hourly || hourly.length === 0) {
-  return '<div style="color:var(--muted);font-size:0.7rem">Ingen prognos</div>';
-}
+  if (!hourly || hourly.length < 2) {
+    return '<div style="height:90px;color:var(--muted);font-size:0.7rem;display:flex;align-items:center">Ingen prognos tillgänglig</div>';
+  }
 
   const W = 300, H = 90;
   const PADX = 4, PADY_TOP = 22, PADY_BOT = 18;
@@ -1404,6 +1199,7 @@ function buildSparkline(hourly, bestHour) {
     ${dayLabels}
   </svg>`;
 }
+}
 
 // ════════════════════════════════════════
 //  COMPASS
@@ -1460,47 +1256,25 @@ function q(score, label) {
 
 function fmt(v, dec=1) { return v != null ? Number(v).toFixed(dec) : '–'; }
 
-function renderDashboard(results, partial = false) {
-  const sorted = [...results].sort((a, b) => (b.best?.score || 0) - (a.best?.score || 0));
-  const grid   = document.getElementById('spots-grid');
+function renderDashboard(results) {
+  // sort by score desc for initial display
+  const sorted = [...results].sort((a,b) => (b.best?.score||0) - (a.best?.score||0));
+  const grid = document.getElementById('spots-grid');
 
   grid.innerHTML = sorted.map((r, idx) => {
-    const b     = r.best;
+    const b = r.best;
+    if (!b) return `<div class="spot-card"><div class="spot-title">${r.label}</div><p style="color:var(--muted);font-size:0.8rem;margin-top:10px">Ingen data tillgänglig</p></div>`;
+
+    const ql    = q(b.score, b.label);
+    const pct   = b.score; // already 0-100
     const delay = idx * 0.07;
 
-    // Error card
-    if (r.error) {
-      return `
-      <div class="spot-card" id="card-${r.key}" style="animation-delay:${delay}s">
-        <div class="spot-title">${r.label}</div>
-        <div style="color:var(--red);font-size:0.75rem;margin-top:10px">
-          ⚠ Kunde inte hämta data<br>
-          <span style="color:var(--muted);font-size:0.68rem">${r.error}</span>
-        </div>
-        <button onclick="reloadSpot('${r.key}')" style="
-          margin-top:12px;font-family:'Orbitron',sans-serif;font-size:0.6rem;
-          letter-spacing:0.1em;color:var(--bg);background:var(--blue);
-          border:none;border-radius:6px;padding:6px 12px;cursor:pointer">
-          ↻ Försök igen
-        </button>
-      </div>`;
-    }
-
-    if (!b) return `<div class="spot-card" id="card-${r.key}"><div class="spot-title">${r.label}</div><p style="color:var(--muted);font-size:0.8rem;margin-top:10px">Ingen data tillgänglig</p></div>`;
-
-    const ql  = q(b.score, b.label);
-    const pct = b.score;
-
     const reasonsHtml = b.reasons && b.reasons.length
-      ? `<div class="reasons-list">${b.reasons.map(rr => `<span class="reason-chip">${rr}</span>`).join('')}</div>`
-      : '';
-
-    const cacheBadge = r.fromCache
-      ? `<div class="cache-badge">📦 Cache · ${r.cacheAge} min sedan</div>`
+      ? `<div class="reasons-list">${b.reasons.map(r => `<span class="reason-chip">${r}</span>`).join('')}</div>`
       : '';
 
     return `
-    <div class="spot-card" id="card-${r.key}" style="animation-delay:${delay}s">
+    <div class="spot-card" style="animation-delay:${delay}s">
       <div class="spot-card-header">
         <div class="header-left">
           <div class="spot-title">${r.label}</div>
@@ -1546,10 +1320,9 @@ function renderDashboard(results, partial = false) {
       </div>
 
       ${reasonsHtml}
-      ${cacheBadge}
 
       <div class="sparkline-wrap">
-        ${buildSparkline(r.hourly, r.best?.hour)}
+        ${buildSparkline(r.hourly)}
       </div>
     </div>`;
   }).join('');
