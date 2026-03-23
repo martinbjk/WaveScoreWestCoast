@@ -1031,40 +1031,54 @@ async function fetchMarine(lat, lon) {
 //  ANALYSIS
 // ════════════════════════════════════════
 function findBestHour(smhi, marine, spotKey) {
-  const now = new Date();
+  const now = Date.now();
+
   let best = null, bestScore = -Infinity;
-  let currentData = null;
 
   marine.times.forEach((t, i) => {
     const dt = new Date(t);
     const h = dt.getHours();
+
     const wh = marine.heights[i];
     const wp = marine.periods[i];
     const wt = marine.seaTemp[i];
     if (wh == null || wp == null) return;
 
-    // match wind
-    const s = smhi.reduce((p, c) =>
-      Math.abs(new Date(c.time) - dt) < Math.abs(new Date(p.time) - dt) ? c : p
-    );
+    const s = smhi && smhi.length
+      ? smhi.reduce((p, c) =>
+          Math.abs(new Date(c.time).getTime() - dt.getTime()) <
+          Math.abs(new Date(p.time).getTime() - dt.getTime()) ? c : p
+        )
+      : { wind: 0, dir: 0, temp: null };
 
     const dirRad = (s.dir || 0) * Math.PI / 180;
-    const dObj   = { wave: wh, wind: s.wind, period: wp, dir: dirRad, swellDir: null };
+
+    const dObj = {
+      wave: wh,
+      wind: s.wind || 0,
+      period: wp,
+      dir: dirRad,
+      swellDir: s.dir || 0   // 🔥 FIX
+    };
+
     const { score, label, reasons } = calcScore(spotKey, dObj);
 
-    // save current hour data
-    if (!currentData && dt >= new Date(now.getTime() - 3600000)) {
-      currentData = { score, label, reasons, hour: h, wave: wh, period: wp, wind: s.wind, airTemp: s.temp, seaTemp: wt, time: t };
-    }
-
-    // best daytime hour
-    if (h >= 6 && h <= 20 && dt >= now && score > bestScore) {
+    if (h >= 6 && h <= 20 && dt.getTime() >= now && score > bestScore) {
       bestScore = score;
-      best = { score, label, reasons, hour: h, wave: wh, period: wp, wind: s.wind, airTemp: s.temp, seaTemp: wt, time: t };
+      best = {
+        score, label, reasons,
+        hour: h,
+        wave: wh,
+        period: wp,
+        wind: s.wind || 0,
+        airTemp: s.temp,
+        seaTemp: wt,
+        time: t
+      };
     }
   });
 
-  return best || currentData;
+  return best;
 }
 
 // ════════════════════════════════════════
