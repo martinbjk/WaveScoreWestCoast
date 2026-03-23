@@ -1088,32 +1088,72 @@ function findBestHour(smhi, marine, spotKey) {
 //  BUILD SPOT RESULT from raw API data
 // ════════════════════════════════════════
 function buildSpotResult(spot, smhi, marine) {
-  const best = findBestHour(smhi, marine, spot.key);
-  const current = hourly.find(h => {
-  const now = new Date();
-  return new Date(h.t).getHours() === now.getHours();
-}) || best;
 
-  marine.times.forEach((t, i) => {
-    const dateStr = t.split('T')[0];
-    if (dateStr !== today && dateStr !== tomorrow) return;
-    const h  = new Date(t).getHours();
+  const best = findBestHour(smhi, marine, spot.key);
+
+  const now = Date.now();
+
+  // 🔥 Bygg hourly korrekt
+  const hourly = marine.times.map((t, i) => {
+
     const wh = marine.heights[i];
     const wp = marine.periods[i];
-    if (wh == null || wp == null) return;
-    const s = smhi.reduce((p, c) =>
-      Math.abs(new Date(c.time) - new Date(t)) < Math.abs(new Date(p.time) - new Date(t)) ? c : p
-    );
+    const wt = marine.seaTemp[i];
+
+    if (wh == null || wp == null) return null;
+
+    const s = smhi && smhi.length
+      ? smhi.reduce((p, c) =>
+          Math.abs(new Date(c.time).getTime() - new Date(t).getTime()) <
+          Math.abs(new Date(p.time).getTime() - new Date(t).getTime()) ? c : p
+        )
+      : { wind: 0, dir: 0, temp: null };
+
     const dirRad = (s.dir || 0) * Math.PI / 180;
-    const { score } = calcScore(spot.key, { wave: wh, wind: s.wind || 0, period: wp, dir: dirRad, swellDir: null });
-    hourly.push({ t, date: dateStr, h, wave: wh, period: wp, wind: s.wind || 0, score });
-  });
 
-  const nowSmhi = smhi.reduce((p, c) =>
-    Math.abs(new Date(c.time) - now) < Math.abs(new Date(p.time) - now) ? c : p
-  );
+    const { score } = calcScore(spot.key, {
+      wave: wh,
+      wind: s.wind || 0,
+      period: wp,
+      dir: dirRad,
+      swellDir: s.dir || 0
+    });
 
-  return { ...spot, best, hourly, windDir: nowSmhi.dir || 0 };
+    return {
+      t,
+      h: new Date(t).getHours(),
+      wave: wh,
+      period: wp,
+      wind: s.wind || 0,
+      airTemp: s.temp,
+      seaTemp: wt,
+      score
+    };
+  }).filter(Boolean);
+
+  // 🔥 Hitta aktuell timme korrekt
+  const currentIdx = hourly.reduce((ci, d, i) => {
+    const diff = Math.abs(new Date(d.t).getTime() - now);
+    const prev = Math.abs(new Date(hourly[ci].t).getTime() - now);
+    return diff < prev ? i : ci;
+  }, 0);
+
+  const current = hourly[currentIdx];
+
+  // 🔥 Vindriktning NU
+  const currentSmhi = smhi && smhi.length
+    ? smhi.reduce((p, c) =>
+        Math.abs(new Date(c.time).getTime() - new Date(current.t).getTime()) <
+        Math.abs(new Date(p.time).getTime() - new Date(current.t).getTime()) ? c : p
+      )
+    : { dir: 0 };
+
+  return {
+    ...spot,
+    best: current,   // 👈 dashboard visar NU (fix)
+    hourly,
+    windDir: currentSmhi.dir || 0
+  };
 }
 
 // ════════════════════════════════════════
