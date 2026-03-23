@@ -1038,7 +1038,10 @@ function findBestHour(smhi, marine, spotKey) {
   marine.times.forEach((t, i) => {
     const dt = new Date(t);
     const h = dt.getHours();
-    const wh = marine.heights[i];
+    const rawWave = marine.heights[i];
+const factor = WAVE_SPOT_FACTOR[spot.key] || 0.3;
+const wh = rawWave * factor;
+    const effectiveWind = d.wind > 12 ? 12 : d.wind;
     const wp = marine.periods[i];
     const wt = marine.seaTemp[i];
     if (wh == null || wp == null) return;
