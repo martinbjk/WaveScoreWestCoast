@@ -649,9 +649,9 @@
 <nav>
   <div class="nav-brand">🏄 Surf AI V3</div>
   <div class="nav-tabs">
-    <button class="nav-tab active" onclick="showPage('dashboard')">Dashboard</button>
-    <button class="nav-tab" onclick="showPage('wave')">Våganalys</button>
-    <button class="nav-tab" onclick="showPage('method')">Metodik</button>
+    <button class="nav-tab active" onclick="showPage('dashboard', this)">Dashboard</button>
+    <button class="nav-tab" onclick="showPage('wave', this)">Våganalys</button>
+    <button class="nav-tab" onclick="showPage('method', this)">Metodik</button>
   </div>
   <button class="nav-refresh" onclick="loadAll()">↻ Uppdatera</button>
 </nav>
@@ -736,11 +736,11 @@
       <p>Period är den viktigaste parametern – en äkta groundswell med 12+ sekunder ger nästan dubbelt så högt grundvärde som en lokal vindsjö med 6 sekunder, oavsett våghöjd. Onshorestraffet är multiplicativt: stark onshore (8 m/s) kan ta bort upp till 35 poäng.</p>
       <p>Spot-specifika idealriktningar för swell och vind bygger på lokal geografi och din erfarenhet av varje plats:</p>
       <div class="formula-box">
-        Apelviken : swell SW/V  · offshore NNO/O<br>
-        Ringenäs  : swell V     · offshore O<br>
-        Tylösand  : swell SW/V  · offshore NNO<br>
-        Skäret    : swell V/NV  · offshore O/SO<br>
-        Mölle     : swell NV/V  · offshore O/SO
+        Apelviken : swell SW–V (225–270°)   · offshore NNO/O<br>
+        Ringenäs  : swell V (270°)           · offshore O<br>
+        Tylösand  : swell V–NV (270–315°)   · offshore NNO<br>
+        Skäret    : swell V (270°)           · offshore O/SO<br>
+        Mölle     : swell NV–N (315–360°)   · offshore O/SO
       </div>
     </div>
 
@@ -794,14 +794,21 @@ const SPOTS = [
 // ════════════════════════════════════════
 
 const SPOT_CONFIG = {
-  // goodSwell : degrees FROM which swell ideally arrives (meteorological)
-  // offshore  : wind FROM these degrees = offshore = good
-  // onshore   : wind FROM these degrees = onshore  = bad
-  apelviken: { goodSwell: [225, 270],       offshore: [45, 90],   onshore: [225, 270] },
+  // goodSwell : grader VARIFRÅN swellen kommer (meteorologisk konvention)
+  // Apelviken – SW till V, öppen mot Kattegatt sydvästlig swell
+  apelviken: { goodSwell: [225, 247, 270],  offshore: [45, 90],   onshore: [225, 270] },
+
+  // Ringenäs – rakt västlig swell
   ringenas:  { goodSwell: [270],            offshore: [90],       onshore: [270]      },
-  tylosand:  { goodSwell: [225, 270],       offshore: [45],       onshore: [225, 270] },
-  skaret:    { goodSwell: [270, 315],       offshore: [90, 135],  onshore: [270, 315] },
-  molle:     { goodSwell: [315, 270],       offshore: [90, 135],  onshore: [270, 315] }
+
+  // Tylösand – V till NV, bäst på väst-nordväst ~292°
+  tylosand:  { goodSwell: [270, 292, 315],  offshore: [45],       onshore: [225, 270] },
+
+  // Skäret – rakt västlig swell
+  skaret:    { goodSwell: [270],            offshore: [90, 135],  onshore: [270, 315] },
+
+  // Mölle – NV till N, Kullaberg kräver nordlig swell, optimal ~337°
+  molle:     { goodSwell: [315, 337, 360],  offshore: [90, 135],  onshore: [270, 315] }
 };
 
 // Angular distance between two compass degrees (0-180)
@@ -1232,8 +1239,9 @@ function renderDashboard(results) {
     const b = r.best;
     if (!b) return `<div class="spot-card"><div class="spot-title">${r.label}</div><p style="color:var(--muted);font-size:0.8rem;margin-top:10px">Ingen data tillgänglig</p></div>`;
 
-    const ql  = q(b.score, b.label);
-    const pct = b.score; // already 0-100
+    const ql    = q(b.score, b.label);
+    const pct   = b.score; // already 0-100
+    const delay = idx * 0.07;
 
     const reasonsHtml = b.reasons && b.reasons.length
       ? `<div class="reasons-list">${b.reasons.map(r => `<span class="reason-chip">${r}</span>`).join('')}</div>`
@@ -1367,11 +1375,11 @@ function renderWavePage(results) {
 // ════════════════════════════════════════
 //  PAGE NAV
 // ════════════════════════════════════════
-function showPage(id) {
+function showPage(id, btn) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
   document.getElementById('page-' + id).classList.add('active');
-  event.target.classList.add('active');
+  if (btn) btn.classList.add('active');
 }
 
 // ════════════════════════════════════════
