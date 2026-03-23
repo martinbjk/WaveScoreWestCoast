@@ -784,9 +784,10 @@
 <footer>
   Data: SMHI PMP3g · Open-Meteo Marine &nbsp;|&nbsp; Surf AI V3 &nbsp;|&nbsp; Helsingborg
 </footer>
+
 <script>
 // ════════════════════════════════════════
-// CONFIG
+//  CONFIG
 // ════════════════════════════════════════
 const SPOTS = [
   { key: 'apelviken', label: 'Apelviken', lat: 57.11, lon: 12.24 },
@@ -797,205 +798,845 @@ const SPOTS = [
 ];
 
 // ════════════════════════════════════════
-// HELPERS
+//  SCORE ENGINE V3
+//  Returns { score 0-100, label, reasons[] }
+//
+//  Pipeline:
+//   1. Base score  – swell height + period (most important)
+//   2. Swell dir   – bonus if swell arrives from spot's good angles
+//   3. Wind penalty– onshore wind degrades surface quality
+//   4. Wind bonus  – light offshore grooms the face
+//   5. Clamp 0-100 + label + reasons
 // ════════════════════════════════════════
+
+const SPOT_CONFIG = {
+  // goodSwell : grader VARIFRÅN swellen kommer (meteorologisk konvention)
+  // Apelviken – SW till V, öppen mot Kattegatt sydvästlig swell
+  apelviken: { goodSwell: [225, 247, 270],  offshore: [45, 90],   onshore: [225, 270] },
+
+  // Ringenäs – rakt västlig swell
+  ringenas:  { goodSwell: [270],            offshore: [90],       onshore: [270]      },
+
+  // Tylösand – V till NV, bäst på väst-nordväst ~292°
+  tylosand:  { goodSwell: [270, 292, 315],  offshore: [45],       onshore: [225, 270] },
+
+  // Skäret – rakt västlig swell
+  skaret:    { goodSwell: [270],            offshore: [90, 135],  onshore: [270, 315] },
+
+  // Mölle – NV till N, Kullaberg kräver nordlig swell, optimal ~337°
+  molle:     { goodSwell: [315, 337, 360],  offshore: [90, 135],  onshore: [270, 315] }
+};
+
+// Angular distance between two compass degrees (0-180)
 function angDiff(a, b) {
   const d = Math.abs((a - b + 360) % 360);
   return d > 180 ? 360 - d : d;
 }
 
+// How well does `deg` match any of the target directions (tolerance = 45°)
+// Returns 0.0 – 1.0
 function dirMatch(deg, targets, tolerance = 45) {
-  if (!targets) return 0;
+  if (!targets || targets.length === 0) return 0;
   const best = Math.min(...targets.map(t => angDiff(deg, t)));
   return Math.max(0, 1 - best / tolerance);
 }
 
-// ════════════════════════════════════════
-// SPOT CONFIG
-// ════════════════════════════════════════
-const SPOT_CONFIG = {
-  apelviken: { goodSwell: [225,247,270], offshore:[45,90], onshore:[225,270] },
-  ringenas:  { goodSwell: [270], offshore:[90], onshore:[270] },
-  tylosand:  { goodSwell: [270,292,315], offshore:[45], onshore:[225,270] },
-  skaret:    { goodSwell: [270], offshore:[90,135], onshore:[270,315] },
-  molle:     { goodSwell: [315,337,360], offshore:[90,135], onshore:[270,315] }
-};
-
-// ════════════════════════════════════════
-// SCORE ENGINE (FIXED)
-// ════════════════════════════════════════
+// Main score function
+// d = { wave, wind, period, dir (wind dir rad), swellDir (deg) }
+// spotKey = string matching SPOT_CONFIG
 function calcScore(spotKey, d) {
-  const cfg = SPOT_CONFIG[spotKey];
+  const cfg     = SPOT_CONFIG[spotKey] || SPOT_CONFIG.apelviken;
   const reasons = [];
 
-  const windDeg = ((d.dir * 180 / Math.PI) + 360) % 360;
-  const swellDeg = d.swellDir ?? windDeg;
+  // Convert wind dir from radians back to degrees
+  const windDeg  = ((d.dir * 180 / Math.PI) + 360) % 360;
+  const swellDeg = d.swellDir != null ? d.swellDir : windDeg; // fallback if no swell dir
 
+  // ── 1. BASE: swell height (0-40 pts) ──────────────────────────────
+  // 0 m → 0 pts, 1 m → 20 pts, 2 m → 35 pts, 3 m+ → ~40 pts (diminishing)
   const heightPts = Math.min(40, 20 * Math.log1p(d.wave * 1.8));
 
+  // ── 2. BASE: swell period (0-30 pts) ──────────────────────────────
+  // Period is critical – long period = powerful groundswell
+  // < 6s choppy, 8s ok, 12s+ excellent
   let periodPts = 0;
-  if (d.period >= 12) periodPts = 30;
+  if (d.period >= 12)      periodPts = 30;
   else if (d.period >= 10) periodPts = 22;
-  else if (d.period >= 8) periodPts = 14;
-  else if (d.period >= 6) periodPts = 7;
+  else if (d.period >= 8)  periodPts = 14;
+  else if (d.period >= 6)  periodPts = 7;
+  else                     periodPts = 0;
 
-  const swellMatch = dirMatch(swellDeg, cfg.goodSwell);
-  const swellPts = swellMatch * 15;
+  if (d.period >= 12) reasons.push('Lång period – kraftig groundswell');
+  else if (d.period >= 8) reasons.push('Acceptabel period');
+  else reasons.push('Kort period – hackig sjö');
 
+  // ── 3. SWELL DIRECTION bonus (0-15 pts) ──────────────────────────
+  const swellMatch  = dirMatch(swellDeg, cfg.goodSwell, 45);
+  const swellDirPts = swellMatch * 15;
+  if (swellMatch > 0.7) reasons.push('Bra swellriktning för spoten');
+  else if (swellMatch < 0.2) reasons.push('Swellen träffar spoten snett');
+
+  // ── 4. WIND PENALTY (0 to -35 pts) ───────────────────────────────
+  // Onshore wind = surface chop, scaled by wind speed
   const onshoreMatch = dirMatch(windDeg, cfg.onshore, 60);
-  const windPenalty = onshoreMatch * Math.min(d.wind, 12) * 2.9;
+  const windPenalty  = onshoreMatch * Math.min(d.wind, 12) * 2.9;  // max ~35 pts off
 
+  if (onshoreMatch > 0.6 && d.wind > 5)
+    reasons.push(`Onshore vind ${d.wind.toFixed(1)} m/s – stökig yta`);
+  else if (onshoreMatch > 0.6 && d.wind <= 5)
+    reasons.push('Lätt onshore – ok yta');
+
+  // ── 5. OFFSHORE BONUS (0-15 pts) ─────────────────────────────────
+  // Light offshore grooms wave faces
   const offshoreMatch = dirMatch(windDeg, cfg.offshore, 55);
-  let offshoreBonus = 0;
-  if (d.wind >= 1 && d.wind <= 6) offshoreBonus = offshoreMatch * 15;
+  let offshoreBonus   = 0;
+  if (d.wind >= 1 && d.wind <= 6) {
+    offshoreBonus = offshoreMatch * 15;
+    if (offshoreBonus > 8) reasons.push('Offshore vind – grooms vågorna');
+  } else if (d.wind > 6 && offshoreMatch > 0.5) {
+    // Strong offshore is also messy
+    offshoreBonus = offshoreMatch * 5;
+    reasons.push('Stark offshore – hackigt på ytan');
+  }
 
-  let score = heightPts + periodPts + swellPts - windPenalty + offshoreBonus;
-  score = Math.max(0, Math.min(100, Math.round(score)));
+  // ── 6. FLAT CONDITION ────────────────────────────────────────────
+  if (d.wave < 0.3) reasons.push('För låga vågor – plattvält');
 
-  let label = 'POOR';
-  if (d.wave < 0.3) label = 'FLAT';
+  // ── 7. TOTAL ─────────────────────────────────────────────────────
+  const raw   = heightPts + periodPts + swellDirPts - windPenalty + offshoreBonus;
+  const score = Math.round(Math.max(0, Math.min(100, raw)));
+
+  // ── 8. LABEL ─────────────────────────────────────────────────────
+  let label;
+  if (d.wave < 0.3)     label = 'FLAT';
   else if (score >= 75) label = 'EPIC';
   else if (score >= 55) label = 'GOOD';
   else if (score >= 35) label = 'SURFABLE';
+  else                  label = 'POOR';
 
-  return { score, label };
+  return { score, label, reasons };
+}
+
+// Thin compatibility shim so existing modelFn(d) calls still work
+// Returns raw score number (label/reasons retrieved separately via calcScore)
+const MODELS = {
+  apelviken: d => calcScore('apelviken', d).score,
+  ringenas:  d => calcScore('ringenas',  d).score,
+  tylosand:  d => calcScore('tylosand',  d).score,
+  skaret:    d => calcScore('skaret',    d).score,
+  molle:     d => calcScore('molle',     d).score,
+};
+
+// ════════════════════════════════════════
+//  CACHE  (localStorage, 30 min TTL)
+// ════════════════════════════════════════
+const CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
+
+const Cache = {
+  key(spotKey) { return `surfai_v3_${spotKey}`; },
+
+  get(spotKey) {
+    try {
+      const raw = localStorage.getItem(this.key(spotKey));
+      if (!raw) return null;
+      const { ts, data } = JSON.parse(raw);
+      if (Date.now() - ts > CACHE_TTL_MS) { this.del(spotKey); return null; }
+      return data;
+    } catch { return null; }
+  },
+
+  set(spotKey, data) {
+    try {
+      localStorage.setItem(this.key(spotKey), JSON.stringify({ ts: Date.now(), data }));
+    } catch (e) {
+      // localStorage full or blocked – silently ignore
+      console.warn('Cache write failed:', e.message);
+    }
+  },
+
+  del(spotKey) {
+    try { localStorage.removeItem(this.key(spotKey)); } catch {}
+  },
+
+  // Return age in minutes for a cached entry, or null
+  ageMinutes(spotKey) {
+    try {
+      const raw = localStorage.getItem(this.key(spotKey));
+      if (!raw) return null;
+      const { ts } = JSON.parse(raw);
+      return Math.round((Date.now() - ts) / 60000);
+    } catch { return null; }
+  },
+
+  clearAll() {
+    SPOTS.forEach(s => this.del(s.key));
+  }
+};
+
+// In-memory results store
+let allData = {};
+
+// ════════════════════════════════════════
+//  RETRY FETCH  (3 attempts, exp backoff)
+// ════════════════════════════════════════
+async function fetchWithRetry(url, label, maxTries = 3) {
+  let lastErr;
+  for (let attempt = 1; attempt <= maxTries; attempt++) {
+    try {
+      const controller = new AbortController();
+      const timeoutId  = setTimeout(() => controller.abort(), 10000); // 10 s timeout
+      const r = await fetch(url, { signal: controller.signal });
+      clearTimeout(timeoutId);
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      return await r.json();
+    } catch (err) {
+      lastErr = err;
+      if (attempt < maxTries) {
+        const delay = 800 * Math.pow(2, attempt - 1); // 800ms, 1600ms
+        await new Promise(res => setTimeout(res, delay));
+      }
+    }
+  }
+  throw new Error(`${label} misslyckades efter ${maxTries} försök: ${lastErr.message}`);
 }
 
 // ════════════════════════════════════════
-// FETCH
+//  API
 // ════════════════════════════════════════
-async function fetchJSON(url) {
-  const r = await fetch(url);
-  if (!r.ok) throw new Error("API error");
-  return r.json();
-}
-
 async function fetchSMHI(lat, lon) {
   const url = `https://opendata-download-metfcst.smhi.se/api/category/pmp3g/version/2/geotype/point/lon/${lon}/lat/${lat}/data.json`;
-  const d = await fetchJSON(url);
+  const d = await fetchWithRetry(url, 'SMHI');
   return d.timeSeries.map(ts => ({
     time: ts.validTime,
-    wind: ts.parameters.find(p => p.name==='ws')?.values[0] || 0,
-    dir: ts.parameters.find(p => p.name==='wd')?.values[0] || 0,
-    temp: ts.parameters.find(p => p.name==='t')?.values[0] || 0
+    wind: (ts.parameters.find(p => p.name === 'ws') || { values: [0] }).values[0],
+    dir:  (ts.parameters.find(p => p.name === 'wd') || { values: [0] }).values[0],
+    temp: (ts.parameters.find(p => p.name === 't')  || { values: [null] }).values[0]
   }));
 }
 
 async function fetchMarine(lat, lon) {
-  const url = `https://marine-api.open-meteo.com/v1/marine?latitude=${lat}&longitude=${lon}&hourly=wave_height,wave_period,sea_surface_temperature&timezone=Europe%2FStockholm`;
-  const d = await fetchJSON(url);
+  const today   = new Date().toISOString().split('T')[0];
+  const twoDays = new Date(Date.now() + 2 * 86400000).toISOString().split('T')[0];
+  const url = `https://marine-api.open-meteo.com/v1/marine?latitude=${lat}&longitude=${lon}&hourly=wave_height,wave_period,sea_surface_temperature&start_date=${today}&end_date=${twoDays}&timezone=Europe%2FStockholm`;
+  const d = await fetchWithRetry(url, 'Open-Meteo Marine');
   return {
-    times: d.hourly.time,
+    times:   d.hourly.time,
     heights: d.hourly.wave_height,
     periods: d.hourly.wave_period,
-    temps: d.hourly.sea_surface_temperature
+    seaTemp: d.hourly.sea_surface_temperature
   };
 }
 
 // ════════════════════════════════════════
-// BUILD DATA (FIXED BEST LOGIC)
+//  ANALYSIS
 // ════════════════════════════════════════
-function buildSpot(spot, smhi, marine) {
-  const hourly = marine.times.map((t,i) => {
+function findBestHour(smhi, marine, spotKey) {
+  const now = new Date();
+  let best = null, bestScore = -Infinity;
+  let currentData = null;
 
-    const s = smhi.reduce((p,c)=>
-      Math.abs(new Date(c.time)-new Date(t)) <
-      Math.abs(new Date(p.time)-new Date(t)) ? c : p
+  marine.times.forEach((t, i) => {
+    const dt = new Date(t);
+    const h = dt.getHours();
+    const wh = marine.heights[i];
+    const wp = marine.periods[i];
+    const wt = marine.seaTemp[i];
+    if (wh == null || wp == null) return;
+
+    // match wind
+    const s = smhi.reduce((p, c) =>
+      Math.abs(new Date(c.time) - dt) < Math.abs(new Date(p.time) - dt) ? c : p
     );
 
-    const d = {
-      wave: marine.heights[i],
-      period: marine.periods[i],
-      wind: s.wind,
-      dir: s.dir * Math.PI/180,
-      swellDir: s.dir
-    };
+    const dirRad = (s.dir || 0) * Math.PI / 180;
+    const dObj   = { wave: wh, wind: s.wind, period: wp, dir: dirRad, swellDir: null };
+    const { score, label, reasons } = calcScore(spotKey, dObj);
 
-    const res = calcScore(spot.key, d);
+    // save current hour data
+    if (!currentData && dt >= new Date(now.getTime() - 3600000)) {
+      currentData = { score, label, reasons, hour: h, wave: wh, period: wp, wind: s.wind, airTemp: s.temp, seaTemp: wt, time: t };
+    }
 
-    return {
-      t,
-      hour: new Date(t).getHours(),
-      wave: d.wave,
-      period: d.period,
-      wind: d.wind,
-      score: res.score,
-      label: res.label
-    };
+    // best daytime hour
+    if (h >= 6 && h <= 20 && dt >= now && score > bestScore) {
+      bestScore = score;
+      best = { score, label, reasons, hour: h, wave: wh, period: wp, wind: s.wind, airTemp: s.temp, seaTemp: wt, time: t };
+    }
   });
 
-  // 🔥 RIKTIG BEST
-  const best = hourly.reduce((a,b)=> b.score>a.score?b:a);
+  return best || currentData;
+}
 
-  // 🔥 CURRENT
-  const now = Date.now();
-  const current = hourly.reduce((a,b)=>
-    Math.abs(new Date(b.t)-now) < Math.abs(new Date(a.t)-now) ? b : a
+// ════════════════════════════════════════
+//  LOAD
+// ════════════════════════════════════════
+// ════════════════════════════════════════
+//  BUILD SPOT RESULT from raw API data
+// ════════════════════════════════════════
+function buildSpotResult(spot, smhi, marine) {
+  const best = findBestHour(smhi, marine, spot.key);
+  const now  = new Date();
+  const today    = now.toISOString().split('T')[0];
+  const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
+  const hourly   = [];
+
+  marine.times.forEach((t, i) => {
+    const dateStr = t.split('T')[0];
+    if (dateStr !== today && dateStr !== tomorrow) return;
+    const h  = new Date(t).getHours();
+    const wh = marine.heights[i];
+    const wp = marine.periods[i];
+    if (wh == null || wp == null) return;
+    const s = smhi.reduce((p, c) =>
+      Math.abs(new Date(c.time) - new Date(t)) < Math.abs(new Date(p.time) - new Date(t)) ? c : p
+    );
+    const dirRad = (s.dir || 0) * Math.PI / 180;
+    const { score } = calcScore(spot.key, { wave: wh, wind: s.wind || 0, period: wp, dir: dirRad, swellDir: null });
+    hourly.push({ t, date: dateStr, h, wave: wh, period: wp, wind: s.wind || 0, score });
+  });
+
+  const nowSmhi = smhi.reduce((p, c) =>
+    Math.abs(new Date(c.time) - now) < Math.abs(new Date(p.time) - now) ? c : p
   );
 
-  return {
-    ...spot,
-    best,
-    current,
-    hourly
-  };
+  return { ...spot, best, hourly, windDir: nowSmhi.dir || 0 };
 }
 
 // ════════════════════════════════════════
-// LOAD
+//  LOAD SINGLE SPOT  (cache-first)
 // ════════════════════════════════════════
-async function loadAll() {
-  const results = await Promise.all(SPOTS.map(async s=>{
-    const [smhi, marine] = await Promise.all([
-      fetchSMHI(s.lat,s.lon),
-      fetchMarine(s.lat,s.lon)
-    ]);
-    return buildSpot(s, smhi, marine);
-  }));
+async function loadSpot(spot, { forceRefresh = false } = {}) {
+  // 1. Try cache first (unless forced refresh)
+  if (!forceRefresh) {
+    const cached = Cache.get(spot.key);
+    if (cached) {
+      const age = Cache.ageMinutes(spot.key);
+      return { ...cached, fromCache: true, cacheAge: age };
+    }
+  }
 
-  render(results);
+  // 2. Fetch fresh data with retry
+  const [smhi, marine] = await Promise.all([
+    fetchSMHI(spot.lat, spot.lon),
+    fetchMarine(spot.lat, spot.lon)
+  ]);
+
+  const result = buildSpotResult(spot, smhi, marine);
+
+  // 3. Store in cache
+  Cache.set(spot.key, result);
+
+  return { ...result, fromCache: false, cacheAge: 0 };
 }
 
 // ════════════════════════════════════════
-// RENDER (FIXED)
+//  UPDATE NAV TIMESTAMP
 // ════════════════════════════════════════
-function render(data) {
-  const grid = document.getElementById("spots-grid");
+function updateTimestamp(results) {
+  const now    = new Date();
+  const hh     = now.getHours().toString().padStart(2, '0');
+  const mm     = now.getMinutes().toString().padStart(2, '0');
+  const cached = results.filter(r => r.fromCache).length;
+  const live   = results.filter(r => !r.fromCache && !r.error).length;
+  const errors = results.filter(r => r.error).length;
 
-  grid.innerHTML = data.map(r=>{
-    const b = r.best; // 🔥 rätt nu
+  let label = `Uppdaterad ${hh}:${mm}`;
+  if (cached > 0) label += ` · ${cached} från cache`;
+  if (errors > 0) label += ` · ⚠ ${errors} misslyckades`;
+
+  document.getElementById('last-updated').textContent = label;
+}
+
+// ════════════════════════════════════════
+//  LOAD ALL  (staggered, per-spot errors)
+// ════════════════════════════════════════
+async function loadAll(forceRefresh = false) {
+  if (forceRefresh) Cache.clearAll();
+
+  renderSkeletons();
+  allData = {};
+
+  const results = [];
+  const grid    = document.getElementById('spots-grid');
+
+  // Pre-fill grid with skeleton placeholders keyed by spot
+  grid.innerHTML = SPOTS.map((s, i) =>
+    `<div class="spot-card loading" id="card-${s.key}" style="animation-delay:${i*0.07}s">
+      <div class="spot-title" style="color:var(--muted)">${s.label}</div>
+      <div class="skeleton" style="height:52px;margin:12px 0"></div>
+      <div class="skeleton" style="height:10px"></div>
+    </div>`
+  ).join('');
+
+  // Load each spot independently – one failure won't block others
+  const promises = SPOTS.map(async (spot, idx) => {
+    try {
+      const result = await loadSpot(spot, { forceRefresh });
+      allData[spot.key] = result;
+      results.push(result);
+
+      // Replace skeleton with live card as soon as data arrives
+      const cardEl = document.getElementById(`card-${spot.key}`);
+      if (cardEl) {
+        const sorted = [...results].sort((a, b) => (b.best?.score || 0) - (a.best?.score || 0));
+        renderDashboard(sorted, /* partial= */ true);
+        renderWavePage(sorted);
+      }
+    } catch (err) {
+      const errorResult = { ...spot, error: err.message, best: null, hourly: [], windDir: 0, fromCache: false };
+      results.push(errorResult);
+      allData[spot.key] = errorResult;
+
+      const cardEl = document.getElementById(`card-${spot.key}`);
+      if (cardEl) {
+        cardEl.classList.remove('loading');
+        cardEl.innerHTML = `
+          <div class="spot-title">${spot.label}</div>
+          <div style="color:var(--red);font-size:0.75rem;margin-top:10px">
+            ⚠ Kunde inte hämta data<br>
+            <span style="color:var(--muted);font-size:0.68rem">${err.message}</span>
+          </div>
+          <button onclick="reloadSpot('${spot.key}')" style="
+            margin-top:12px;font-family:'Orbitron',sans-serif;font-size:0.6rem;
+            letter-spacing:0.1em;color:var(--bg);background:var(--blue);
+            border:none;border-radius:6px;padding:6px 12px;cursor:pointer">
+            ↻ Försök igen
+          </button>`;
+      }
+    }
+
+    // Update timestamp after each spot resolves
+    updateTimestamp(results);
+  });
+
+  await Promise.allSettled(promises);
+
+  // Final render pass (sorted by score)
+  const sorted = [...Object.values(allData)].sort((a, b) => (b.best?.score || 0) - (a.best?.score || 0));
+  renderDashboard(sorted);
+  renderWavePage(sorted);
+  updateTimestamp(results);
+}
+
+// ════════════════════════════════════════
+//  RELOAD SINGLE SPOT  (retry button)
+// ════════════════════════════════════════
+async function reloadSpot(spotKey) {
+  const spot   = SPOTS.find(s => s.key === spotKey);
+  if (!spot) return;
+  const cardEl = document.getElementById(`card-${spotKey}`);
+  if (cardEl) {
+    cardEl.classList.add('loading');
+    cardEl.innerHTML = `
+      <div class="spot-title" style="color:var(--muted)">${spot.label}</div>
+      <div class="skeleton" style="height:52px;margin:12px 0"></div>
+      <div class="skeleton" style="height:10px"></div>`;
+  }
+  try {
+    Cache.del(spotKey);
+    const result    = await loadSpot(spot, { forceRefresh: true });
+    allData[spotKey] = result;
+    const sorted    = Object.values(allData).sort((a, b) => (b.best?.score || 0) - (a.best?.score || 0));
+    renderDashboard(sorted);
+    renderWavePage(sorted);
+    updateTimestamp(Object.values(allData));
+  } catch (err) {
+    if (cardEl) {
+      cardEl.classList.remove('loading');
+      cardEl.innerHTML = `
+        <div class="spot-title">${spot.label}</div>
+        <div style="color:var(--red);font-size:0.75rem;margin-top:10px">⚠ ${err.message}</div>
+        <button onclick="reloadSpot('${spotKey}')" style="
+          margin-top:12px;font-family:'Orbitron',sans-serif;font-size:0.6rem;
+          letter-spacing:0.1em;color:var(--bg);background:var(--blue);
+          border:none;border-radius:6px;padding:6px 12px;cursor:pointer">
+          ↻ Försök igen
+        </button>`;
+    }
+  }
+}
+
+// ════════════════════════════════════════
+//  RENDER: SKELETON
+// ════════════════════════════════════════
+function renderSkeletons() {
+  // Skeletons are now rendered inline in loadAll() with per-spot ids.
+  // This function is kept as a fallback no-op.
+}
+
+// ════════════════════════════════════════
+//  WAVE BAR CHART – 48h prognos
+//  Staplar = våghöjd, färg = score-kvalitet
+//  Dagsgräns, NU-linje, bästa-timme-markering
+// ════════════════════════════════════════
+function buildSparkline(hourly, bestHour) {
+  if (!hourly || hourly.length < 2) {
+    return '<div style="height:90px;color:var(--muted);font-size:0.7rem;display:flex;align-items:center">Ingen prognos tillgänglig</div>';
+  }
+
+  const W = 300, H = 90;
+  const PADX = 4, PADY_TOP = 22, PADY_BOT = 18;
+  const plotW = W - PADX * 2;
+  const plotH = H - PADY_TOP - PADY_BOT;
+
+  const n       = hourly.length;
+  const barW    = Math.max(2, (plotW / n) - 1);
+  const gap     = plotW / n;
+
+  const maxWave = Math.max(...hourly.map(d => d.wave), 0.5);
+  const now     = new Date();
+  const nowMs   = now.getTime();
+
+  // Find today/tomorrow boundary index
+  const today = now.toISOString().split('T')[0];
+
+  // Find best score index for annotation
+  const bestScoreIdx = hourly.reduce((bi, d, i) => d.score > hourly[bi].score ? i : bi, 0);
+
+  // x centre of bar i
+  const bx = i => PADX + i * gap + gap / 2;
+  // bar height in px
+  const bh = wave => Math.max(2, (wave / maxWave) * plotH);
+  // bar top y
+  const by = wave => PADY_TOP + plotH - bh(wave);
+
+  // Bar colour by score
+  function barColor(score, isNight) {
+    if (isNight) return 'rgba(14,74,114,0.5)';
+    if (score >= 55) return '#22c55e';
+    if (score >= 35) return '#f59e0b';
+    return '#ef4444';
+  }
+
+  // Build bars
+  let bars = '';
+  let dayLabels = '';
+  let seenDates = {};
+
+  hourly.forEach((d, i) => {
+    const isNight = d.h < 6 || d.h > 21;
+    const x = bx(i);
+    const h = bh(d.wave);
+    const y = by(d.wave);
+    const col = barColor(d.score, isNight);
+    const isBest = (i === bestScoreIdx && !isNight);
+    const isPast = new Date(d.t).getTime() < nowMs;
+
+    // Fade past bars
+    const opacity = isPast ? 0.35 : 1;
+
+    bars += `<rect x="${(x - barW/2).toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${h.toFixed(1)}"
+      fill="${col}" opacity="${opacity}" rx="1"/>`;
+
+    // Best-hour glow + label
+    if (isBest) {
+      bars += `<rect x="${(x - barW/2 - 1).toFixed(1)}" y="${(y-1).toFixed(1)}" width="${(barW+2).toFixed(1)}" height="${(h+2).toFixed(1)}"
+        fill="none" stroke="${col}" stroke-width="1.5" rx="2" opacity="0.8"/>`;
+      const labelAnchor = x > W * 0.7 ? 'end' : x < W * 0.3 ? 'start' : 'middle';
+      const lx = x > W * 0.7 ? x - 3 : x < W * 0.3 ? x + 3 : x;
+      bars += `<text x="${lx.toFixed(1)}" y="${(y - 5).toFixed(1)}"
+        text-anchor="${labelAnchor}" font-family="Orbitron,sans-serif"
+        font-size="7" font-weight="700" fill="${col}">${d.wave.toFixed(1)}m @ ${d.h.toString().padStart(2,'0')}:00</text>`;
+    }
+
+    // Hour tick every 3h (skip 00, 03 – too cluttered at night)
+    if (d.h % 6 === 0 && d.h > 0) {
+      bars += `<text x="${x.toFixed(1)}" y="${H - 3}" text-anchor="middle"
+        font-family="Orbitron,sans-serif" font-size="6" fill="rgba(77,122,150,0.75)">${d.h.toString().padStart(2,'0')}</text>`;
+    }
+
+    // Day boundary line + label (first occurrence of each date)
+    if (!seenDates[d.date]) {
+      seenDates[d.date] = true;
+      if (d.date !== today) {
+        // Vertical day separator
+        const sepX = (x - gap / 2).toFixed(1);
+        bars += `<line x1="${sepX}" y1="${PADY_TOP}" x2="${sepX}" y2="${H - PADY_BOT}"
+          stroke="rgba(0,180,216,0.25)" stroke-width="1" stroke-dasharray="3 2"/>`;
+      }
+      // Date label at top
+      const dateObj = new Date(d.date + 'T12:00:00');
+      const dayName = d.date === today ? 'IDAG' :
+        ['SÖN','MÅN','TIS','ONS','TOR','FRE','LÖR'][dateObj.getDay()];
+      dayLabels += `<text x="${x.toFixed(1)}" y="10" text-anchor="start"
+        font-family="Orbitron,sans-serif" font-size="6.5" font-weight="700"
+        fill="${d.date === today ? '#00b4d8' : 'rgba(77,122,150,0.9)'}"
+        letter-spacing="0.08em">${dayName}</text>`;
+    }
+  });
+
+  // "NU" vertical line – find closest bar to now
+  const nowIdx = hourly.reduce((ci, d, i) =>
+    Math.abs(new Date(d.t).getTime() - nowMs) < Math.abs(new Date(hourly[ci].t).getTime() - nowMs) ? i : ci, 0);
+  const nowX = bx(nowIdx).toFixed(1);
+  const nowLine = `
+    <line x1="${nowX}" y1="${PADY_TOP}" x2="${nowX}" y2="${H - PADY_BOT}"
+      stroke="rgba(0,180,216,0.55)" stroke-width="1.2" stroke-dasharray="3 2"/>
+    <text x="${nowX}" y="${PADY_TOP - 4}" text-anchor="middle"
+      font-family="Orbitron,sans-serif" font-size="6.5" font-weight="700"
+      fill="rgba(0,180,216,0.8)">NU</text>`;
+
+  // Y-axis wave height labels
+  const yLabels = [0.25, 0.5, 0.75, 1.0].map(frac => {
+    const val = (frac * maxWave);
+    if (val < 0.1) return '';
+    const yPos = PADY_TOP + plotH - frac * plotH;
+    return `<text x="${PADX}" y="${yPos.toFixed(1)}" dominant-baseline="middle"
+      font-family="Orbitron,sans-serif" font-size="5.5" fill="rgba(77,122,150,0.6)"
+      text-anchor="start">${val.toFixed(1)}</text>
+    <line x1="${PADX + 14}" y1="${yPos.toFixed(1)}" x2="${W - PADX}" y2="${yPos.toFixed(1)}"
+      stroke="rgba(14,74,114,0.18)" stroke-width="0.5"/>`;
+  }).join('');
+
+  // Baseline
+  const baseline = `<line x1="${PADX}" y1="${PADY_TOP + plotH}" x2="${W - PADX}" y2="${PADY_TOP + plotH}"
+    stroke="rgba(14,74,114,0.5)" stroke-width="1"/>`;
+
+  return `<svg class="sparkline-svg" viewBox="0 0 ${W} ${H}"
+    style="height:${H}px;width:100%;overflow:visible">
+    ${yLabels}
+    ${baseline}
+    ${bars}
+    ${nowLine}
+    ${dayLabels}
+  </svg>`;
+}
+}
+
+// ════════════════════════════════════════
+//  COMPASS
+// ════════════════════════════════════════
+function buildCompass(deg) {
+  const r = deg || 0;
+  // Cardinal label
+  const dirs = ['N','NNO','NO','ONO','O','OSO','SO','SSO','S','SSV','SV','VSV','V','VNV','NV','NNV'];
+  const card = dirs[Math.round(r / 22.5) % 16];
+
+  return `
+  <div class="compass-wrap">
+    <svg class="compass-svg" viewBox="0 0 44 44">
+      <!-- Outer ring -->
+      <circle cx="22" cy="22" r="20" fill="none" stroke="rgba(14,74,114,0.7)" stroke-width="1.2"/>
+      <!-- Tick marks N/E/S/W -->
+      <line x1="22" y1="3" x2="22" y2="7" stroke="#00b4d8" stroke-width="1.5"/>
+      <line x1="41" y1="22" x2="37" y2="22" stroke="rgba(14,74,114,0.8)" stroke-width="1"/>
+      <line x1="22" y1="41" x2="22" y2="37" stroke="rgba(14,74,114,0.8)" stroke-width="1"/>
+      <line x1="3" y1="22" x2="7" y2="22" stroke="rgba(14,74,114,0.8)" stroke-width="1"/>
+      <!-- N label -->
+      <text x="22" y="13" text-anchor="middle" font-family="Orbitron,sans-serif" font-size="5" fill="#00b4d8" font-weight="700">N</text>
+      <!-- Arrow group – rotated by wind direction -->
+      <g transform="rotate(${r}, 22, 22)">
+        <!-- Arrow shaft -->
+        <line x1="22" y1="10" x2="22" y2="32" stroke="#48cae4" stroke-width="2" stroke-linecap="round"/>
+        <!-- Arrowhead (pointing direction wind comes FROM) -->
+        <polygon points="22,6 19,13 25,13" fill="#48cae4"/>
+        <!-- Tail feathers -->
+        <polygon points="22,32 19.5,27 24.5,27" fill="rgba(72,202,228,0.35)"/>
+      </g>
+      <!-- Center dot -->
+      <circle cx="22" cy="22" r="2.5" fill="#00b4d8"/>
+    </svg>
+    <div class="compass-deg">${card} ${Math.round(r)}°</div>
+  </div>`;
+}
+
+// ════════════════════════════════════════
+//  RENDER: DASHBOARD
+// ════════════════════════════════════════
+// Maps score 0-100 + label string → display class
+function q(score, label) {
+  if (label === 'EPIC')                     return { label: 'EPIC',     cls: 'good' };
+  if (label === 'GOOD')                     return { label: 'GOOD',     cls: 'good' };
+  if (label === 'SURFABLE')                 return { label: 'SURFABLE', cls: 'ok'   };
+  if (label === 'FLAT')                     return { label: 'FLAT',     cls: 'bad'  };
+  // fallback by numeric score
+  if (score >= 75)  return { label: 'EPIC',     cls: 'good' };
+  if (score >= 55)  return { label: 'GOOD',     cls: 'good' };
+  if (score >= 35)  return { label: 'SURFABLE', cls: 'ok'   };
+  return                   { label: 'POOR',     cls: 'bad'  };
+}
+
+function fmt(v, dec=1) { return v != null ? Number(v).toFixed(dec) : '–'; }
+
+function renderDashboard(results, partial = false) {
+  const sorted = [...results].sort((a, b) => (b.best?.score || 0) - (a.best?.score || 0));
+  const grid   = document.getElementById('spots-grid');
+
+  grid.innerHTML = sorted.map((r, idx) => {
+    const b     = r.best;
+    const delay = idx * 0.07;
+
+    // Error card
+    if (r.error) {
+      return `
+      <div class="spot-card" id="card-${r.key}" style="animation-delay:${delay}s">
+        <div class="spot-title">${r.label}</div>
+        <div style="color:var(--red);font-size:0.75rem;margin-top:10px">
+          ⚠ Kunde inte hämta data<br>
+          <span style="color:var(--muted);font-size:0.68rem">${r.error}</span>
+        </div>
+        <button onclick="reloadSpot('${r.key}')" style="
+          margin-top:12px;font-family:'Orbitron',sans-serif;font-size:0.6rem;
+          letter-spacing:0.1em;color:var(--bg);background:var(--blue);
+          border:none;border-radius:6px;padding:6px 12px;cursor:pointer">
+          ↻ Försök igen
+        </button>
+      </div>`;
+    }
+
+    if (!b) return `<div class="spot-card" id="card-${r.key}"><div class="spot-title">${r.label}</div><p style="color:var(--muted);font-size:0.8rem;margin-top:10px">Ingen data tillgänglig</p></div>`;
+
+    const ql  = q(b.score, b.label);
+    const pct = b.score;
+
+    const reasonsHtml = b.reasons && b.reasons.length
+      ? `<div class="reasons-list">${b.reasons.map(rr => `<span class="reason-chip">${rr}</span>`).join('')}</div>`
+      : '';
+
+    const cacheBadge = r.fromCache
+      ? `<div class="cache-badge">📦 Cache · ${r.cacheAge} min sedan</div>`
+      : '';
 
     return `
-    <div class="spot-card">
-      <div class="spot-title">${r.label}</div>
-      <div>🌊 ${b.wave.toFixed(1)}m</div>
-      <div>⏱ ${b.period}s</div>
-      <div>🌬 ${b.wind.toFixed(1)} m/s</div>
-      <div style="font-size:1.2rem">${b.score} (${b.label})</div>
+    <div class="spot-card" id="card-${r.key}" style="animation-delay:${delay}s">
+      <div class="spot-card-header">
+        <div class="header-left">
+          <div class="spot-title">${r.label}</div>
+          <div class="spot-best-time">⏰ Bäst: ${b.hour.toString().padStart(2,'0')}:00</div>
+        </div>
+        ${buildCompass(r.windDir)}
+      </div>
+
+      <div class="spot-stats">
+        <div class="mini-stat">
+          <div class="mini-stat-icon">🌊</div>
+          <div class="mini-stat-val">${fmt(b.wave)}m</div>
+          <div class="mini-stat-lbl">Våg</div>
+        </div>
+        <div class="mini-stat">
+          <div class="mini-stat-icon">⏱️</div>
+          <div class="mini-stat-val">${fmt(b.period,0)}s</div>
+          <div class="mini-stat-lbl">Period</div>
+        </div>
+        <div class="mini-stat">
+          <div class="mini-stat-icon">🌬️</div>
+          <div class="mini-stat-val">${fmt(b.wind)}m/s</div>
+          <div class="mini-stat-lbl">Vind</div>
+        </div>
+        <div class="mini-stat">
+          <div class="mini-stat-icon">🌡️</div>
+          <div class="mini-stat-val">${fmt(b.airTemp)}°</div>
+          <div class="mini-stat-lbl">Luft</div>
+        </div>
+        <div class="mini-stat">
+          <div class="mini-stat-icon">💧</div>
+          <div class="mini-stat-val">${fmt(b.seaTemp)}°</div>
+          <div class="mini-stat-lbl">Vatten</div>
+        </div>
+      </div>
+
+      <div class="score-row">
+        <div class="bar-track">
+          <div class="bar-fill bar-${ql.cls}" style="width:${pct}%"></div>
+        </div>
+        <div class="score-num ${ql.cls}">${b.score}</div>
+        <div class="verdict-badge verdict-${ql.cls}">${ql.label}</div>
+      </div>
+
+      ${reasonsHtml}
+      ${cacheBadge}
 
       <div class="sparkline-wrap">
-        ${buildSparkline(r.hourly, r.best)}
+        ${buildSparkline(r.hourly)}
       </div>
+    </div>`;
+  }).join('');
+}
+
+// ════════════════════════════════════════
+//  RENDER: WAVE PAGE
+// ════════════════════════════════════════
+function renderWavePage(results) {
+  const sorted = [...results].sort((a,b) => (b.best?.score||0) - (a.best?.score||0));
+
+  const rows = sorted.map((r, i) => {
+    const b = r.best;
+    if (!b) return `<tr><td class="spot-col">${r.label}</td><td colspan="7" style="color:var(--muted)">–</td></tr>`;
+
+    const ql = q(b.score, b.label);
+    const waveBarW = Math.min(60, b.wave * 40);
+    const medals = ['🥇','🥈','🥉','',''];
+
+    return `
+    <tr>
+      <td class="spot-col">${medals[i]} ${r.label}</td>
+      <td class="val">${b.hour.toString().padStart(2,'0')}:00</td>
+      <td>
+        <span class="wave-bar" style="width:${waveBarW}px"></span>
+        <span class="val">${fmt(b.wave)} m</span>
+      </td>
+      <td class="val">${fmt(b.period, 0)} s</td>
+      <td class="val">${fmt(b.wind)} m/s</td>
+      <td class="val">${fmt(b.airTemp)}°C</td>
+      <td class="val">${fmt(b.seaTemp)}°C</td>
+      <td class="score-cell ${ql.cls}">${b.score.toFixed(1)} <span style="font-size:0.6rem;letter-spacing:0.1em">${ql.label}</span></td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('wave-content').innerHTML = `
+    <div class="wave-table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Spot</th>
+            <th>⏰ Bästa tid</th>
+            <th>🌊 Våghöjd</th>
+            <th>⏱ Period</th>
+            <th>🌬️ Vind</th>
+            <th>🌡️ Luft</th>
+            <th>💧 Vatten</th>
+            <th>Score</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
     </div>
-    `;
-  }).join("");
+
+    <div style="margin-top:28px">
+      <div style="font-family:'Orbitron',sans-serif;font-size:0.72rem;color:var(--muted);letter-spacing:0.14em;text-transform:uppercase;margin-bottom:14px">
+        Våghöjdsfördelning
+      </div>
+      ${sorted.map(r => {
+        if (!r.best) return '';
+        const ql = q(r.best.score, r.best.label);
+        const pct = r.best.score; // 0-100
+        return `
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
+          <div style="font-family:'Orbitron',sans-serif;font-size:0.7rem;color:var(--text);min-width:90px">${r.label}</div>
+          <div style="flex:1;height:9px;background:var(--surface);border-radius:4px;border:1px solid var(--border-dim);overflow:hidden">
+            <div style="width:${pct}%;height:100%;border-radius:4px;background:linear-gradient(90deg,var(--blue-dim),var(--teal))"></div>
+          </div>
+          <div style="font-family:'Orbitron',sans-serif;font-size:0.72rem;color:var(--teal);min-width:42px;text-align:right">${fmt(r.best.wave)} m</div>
+          <div class="verdict-badge verdict-${ql.cls}" style="min-width:58px;text-align:center">${ql.label}</div>
+        </div>`;
+      }).join('')}
+    </div>`;
 }
 
 // ════════════════════════════════════════
-// SPARKLINE (FIXED)
+//  PAGE NAV
 // ════════════════════════════════════════
-function buildSparkline(hourly, best) {
-  return hourly.map(h=>{
-    const isBest = h.hour === best.hour;
-    return `<span style="
-      display:inline-block;
-      width:4px;
-      height:${h.wave*40}px;
-      background:${isBest?'#22c55e':'#00b4d8'};
-      margin-right:2px"></span>`;
-  }).join("");
+function showPage(id, btn) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('page-' + id).classList.add('active');
+  if (btn) btn.classList.add('active');
 }
 
-// INIT
+// ════════════════════════════════════════
+//  INIT
+// ════════════════════════════════════════
 loadAll();
 </script>
+</body>
+</html>
