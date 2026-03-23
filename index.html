@@ -1075,10 +1075,10 @@ function findBestHour(smhi, marine, spotKey) {
 // ════════════════════════════════════════
 function buildSpotResult(spot, smhi, marine) {
   const best = findBestHour(smhi, marine, spot.key);
-  const now  = new Date();
-  const today    = now.toISOString().split('T')[0];
-  const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
-  const hourly   = [];
+  const current = hourly.find(h => {
+  const now = new Date();
+  return new Date(h.t).getHours() === now.getHours();
+}) || best;
 
   marine.times.forEach((t, i) => {
     const dateStr = t.split('T')[0];
