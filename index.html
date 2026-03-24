@@ -2,7 +2,7 @@
 <html lang="sv">
 <head>
   <meta charset="UTF-8"/>
-  <title>Surf AI V3 – Västkustens Surfradar</title>
+  <title>Surf AI V4 – Västkustens Surfradar</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Exo+2:ital,wght@0,300;0,400;0,600;1,300&display=swap" rel="stylesheet"/>
   <style>
@@ -17,7 +17,6 @@
       --blue-dim:   #0077a8;
       --glow:       rgba(0,180,216,0.18);
       --teal:       #48cae4;
-      --cyan-light: #90e0ef;
       --green:      #22c55e;
       --yellow:     #f59e0b;
       --red:        #ef4444;
@@ -27,7 +26,6 @@
     }
 
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
     html { scroll-behavior: smooth; }
 
     body {
@@ -38,7 +36,6 @@
       overflow-x: hidden;
     }
 
-    /* ── Ocean depth background ── */
     body::before {
       content: '';
       position: fixed; inset: 0; z-index: 0;
@@ -49,7 +46,6 @@
       pointer-events: none;
     }
 
-    /* scan lines */
     body::after {
       content: '';
       position: fixed; inset: 0; z-index: 0;
@@ -60,584 +56,185 @@
       pointer-events: none;
     }
 
-    /* ════════════════════════════════════
-       NAV
-    ════════════════════════════════════ */
+    /* ── NAV ── */
     nav {
       position: sticky; top: 0; z-index: 100;
       background: rgba(4,13,24,0.92);
       backdrop-filter: blur(12px);
       border-bottom: 1px solid var(--border-dim);
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 0 24px;
-      height: 56px;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 24px; height: 56px;
     }
-
     .nav-brand {
-      font-family: 'Orbitron', sans-serif;
-      font-size: 1rem;
-      font-weight: 900;
-      color: var(--blue);
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
+      font-family: 'Orbitron', sans-serif; font-size: 1rem; font-weight: 900;
+      color: var(--blue); letter-spacing: 0.12em; text-transform: uppercase;
       text-shadow: 0 0 18px rgba(0,180,216,0.5);
-      display: flex;
-      align-items: center;
-      gap: 10px;
     }
-
-    .nav-tabs {
-      display: flex;
-      gap: 4px;
-    }
-
+    .nav-tabs { display: flex; gap: 4px; }
     .nav-tab {
-      font-family: 'Orbitron', sans-serif;
-      font-size: 0.65rem;
-      letter-spacing: 0.14em;
-      text-transform: uppercase;
-      color: var(--muted);
-      background: none;
-      border: 1px solid transparent;
-      border-radius: 6px;
-      padding: 7px 14px;
-      cursor: pointer;
-      transition: all 0.2s;
+      font-family: 'Orbitron', sans-serif; font-size: 0.65rem;
+      letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted);
+      background: none; border: 1px solid transparent; border-radius: 6px;
+      padding: 7px 14px; cursor: pointer; transition: all 0.2s;
     }
-
-    .nav-tab:hover {
-      color: var(--teal);
-      border-color: var(--border-dim);
-    }
-
-    .nav-tab.active {
-      color: var(--blue);
-      border-color: var(--border);
-      background: var(--glow);
-    }
-
+    .nav-tab:hover { color: var(--teal); border-color: var(--border-dim); }
+    .nav-tab.active { color: var(--blue); border-color: var(--border); background: var(--glow); }
     .nav-refresh {
-      font-family: 'Orbitron', sans-serif;
-      font-size: 0.62rem;
-      letter-spacing: 0.1em;
-      color: var(--bg);
-      background: var(--blue);
-      border: none;
-      border-radius: 6px;
-      padding: 7px 14px;
-      cursor: pointer;
-      transition: all 0.2s;
+      font-family: 'Orbitron', sans-serif; font-size: 0.62rem; letter-spacing: 0.1em;
+      color: var(--bg); background: var(--blue); border: none; border-radius: 6px;
+      padding: 7px 14px; cursor: pointer; transition: all 0.2s;
     }
+    .nav-refresh:hover { background: var(--teal); box-shadow: 0 0 14px rgba(0,180,216,0.4); }
+    .nav-refresh:disabled { opacity: 0.5; cursor: not-allowed; }
 
-    .nav-refresh:hover {
-      background: var(--teal);
-      box-shadow: 0 0 14px rgba(0,180,216,0.4);
-    }
-
-    /* ════════════════════════════════════
-       PAGES
-    ════════════════════════════════════ */
+    /* ── PAGES ── */
     .page { display: none; position: relative; z-index: 1; }
     .page.active { display: block; }
 
-    /* ════════════════════════════════════
-       DASHBOARD PAGE
-    ════════════════════════════════════ */
-    .dash-header {
-      text-align: center;
-      padding: 36px 20px 24px;
-    }
-
+    /* ── DASHBOARD ── */
+    .dash-header { text-align: center; padding: 36px 20px 20px; }
     .dash-header h1 {
       font-family: 'Orbitron', sans-serif;
-      font-size: clamp(1.4rem, 4vw, 2.2rem);
-      font-weight: 900;
-      color: var(--blue);
-      letter-spacing: 0.1em;
+      font-size: clamp(1.4rem, 4vw, 2.2rem); font-weight: 900;
+      color: var(--blue); letter-spacing: 0.1em;
       text-shadow: 0 0 30px rgba(0,180,216,0.45);
     }
+    .dash-header p { color: var(--muted); font-size: 0.78rem; letter-spacing: 0.2em; text-transform: uppercase; margin-top: 6px; }
 
-    .dash-header p {
-      color: var(--muted);
-      font-size: 0.78rem;
-      letter-spacing: 0.2em;
-      text-transform: uppercase;
-      margin-top: 5px;
-    }
+    .last-updated { font-size: 0.68rem; color: var(--muted); letter-spacing: 0.1em; text-align: center; padding: 4px 0 18px; }
 
-    /* grid of all spots */
     .spots-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-      gap: 16px;
-      padding: 10px 20px 40px;
-      max-width: 1100px;
-      margin: 0 auto;
+      grid-template-columns: repeat(auto-fill, minmax(310px, 1fr));
+      gap: 16px; padding: 0 20px 40px; max-width: 1100px; margin: 0 auto;
     }
 
+    /* ── SPOT CARD ── */
     .spot-card {
-      background: var(--card);
-      border: 1px solid var(--border-dim);
-      border-radius: 14px;
-      padding: 20px;
-      cursor: pointer;
-      transition: border-color 0.25s, box-shadow 0.25s, transform 0.2s;
-      animation: fadeUp 0.5s ease both;
+      background: var(--card); border: 1px solid var(--border-dim); border-radius: 14px;
+      padding: 20px; animation: fadeUp 0.5s ease both;
       box-shadow: 0 4px 20px rgba(0,0,0,0.35);
+      transition: border-color 0.25s, box-shadow 0.25s, transform 0.2s;
     }
-
     .spot-card:hover {
       border-color: var(--blue);
-      box-shadow: 0 0 24px rgba(0,180,216,0.2), 0 8px 30px rgba(0,0,0,0.4);
+      box-shadow: 0 0 24px rgba(0,180,216,0.18), 0 8px 30px rgba(0,0,0,0.4);
       transform: translateY(-2px);
     }
 
-    .spot-card.loading {
-      opacity: 0.5;
-      pointer-events: none;
+    .card-top {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 16px;
+    }
+    .spot-name {
+      font-family: 'Orbitron', sans-serif; font-size: 1rem; font-weight: 700;
+      color: var(--blue); letter-spacing: 0.08em; text-transform: uppercase;
+    }
+    .spot-time {
+      font-family: 'Orbitron', sans-serif; font-size: 0.6rem; color: var(--teal);
+      background: rgba(0,180,216,0.1); border: 1px solid var(--border-dim);
+      border-radius: 5px; padding: 3px 8px; letter-spacing: 0.1em;
     }
 
-    .spot-card-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
+    /* Big data row */
+    .data-grid {
+      display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px;
       margin-bottom: 14px;
     }
 
-    .spot-title {
+    .data-cell {
+      background: var(--surface); border: 1px solid var(--border-dim);
+      border-radius: 9px; padding: 10px 12px;
+    }
+    .data-cell.full { grid-column: 1 / -1; }
+
+    .cell-label {
+      font-size: 0.6rem; color: var(--muted); text-transform: uppercase;
+      letter-spacing: 0.12em; margin-bottom: 4px;
       font-family: 'Orbitron', sans-serif;
-      font-size: 0.95rem;
-      font-weight: 700;
-      color: var(--blue);
-      letter-spacing: 0.08em;
+    }
+    .cell-value {
+      font-family: 'Orbitron', sans-serif; font-size: 1.3rem; font-weight: 700;
+      color: var(--teal); line-height: 1;
+    }
+    .cell-value.big { font-size: 1.6rem; }
+    .cell-sub {
+      font-size: 0.65rem; color: var(--muted); margin-top: 3px;
+      font-family: 'Exo 2', sans-serif;
     }
 
-    .spot-best-time {
-      font-family: 'Orbitron', sans-serif;
-      font-size: 0.6rem;
+    /* Wind direction indicator */
+    .wind-row {
+      display: flex; align-items: center; gap: 10px;
+    }
+    .wind-val {
+      font-family: 'Orbitron', sans-serif; font-size: 1.3rem; font-weight: 700;
       color: var(--teal);
-      background: rgba(0,180,216,0.1);
-      border: 1px solid var(--border-dim);
-      border-radius: 5px;
-      padding: 3px 8px;
-      letter-spacing: 0.1em;
     }
 
-    /* mini stats row */
-    .spot-stats {
-      display: grid;
-      grid-template-columns: repeat(5, 1fr);
-      gap: 6px;
-      margin-bottom: 14px;
+    /* ── COMPASS ── */
+    .compass-wrap { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+    .compass-svg { width: 48px; height: 48px; filter: drop-shadow(0 0 4px rgba(0,180,216,0.4)); }
+    .compass-deg { font-family: 'Orbitron', sans-serif; font-size: 0.55rem; color: var(--muted); letter-spacing: 0.05em; }
+
+    /* ── SPARKLINE (wind speed over time) ── */
+    .sparkline-wrap { margin-top: 12px; }
+    .spark-label {
+      font-family: 'Orbitron', sans-serif; font-size: 0.58rem; color: var(--muted);
+      letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 4px;
+      display: flex; justify-content: space-between;
     }
+    .sparkline-svg { width: 100%; display: block; overflow: visible; }
 
-    .mini-stat {
-      background: var(--surface);
-      border: 1px solid var(--border-dim);
-      border-radius: 7px;
-      padding: 7px 4px;
-      text-align: center;
-    }
-
-    .mini-stat-icon { font-size: 1rem; line-height: 1; }
-
-    .mini-stat-val {
-      font-family: 'Orbitron', sans-serif;
-      font-size: 0.72rem;
-      font-weight: 700;
-      color: var(--teal);
-      margin-top: 2px;
-    }
-
-    .mini-stat-lbl {
-      font-size: 0.55rem;
-      color: var(--muted);
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      margin-top: 1px;
-    }
-
-    /* score bar */
-    .score-row {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
-
-    .bar-track {
-      flex: 1;
-      height: 7px;
-      background: var(--surface);
-      border-radius: 4px;
-      overflow: hidden;
-      border: 1px solid var(--border-dim);
-    }
-
-    .bar-fill {
-      height: 100%;
-      border-radius: 4px;
-      transition: width 0.8s cubic-bezier(.4,0,.2,1);
-    }
-
-    .score-num {
-      font-family: 'Orbitron', sans-serif;
-      font-size: 1.2rem;
-      font-weight: 900;
-      min-width: 38px;
-      text-align: right;
-    }
-
-    .verdict-badge {
-      font-family: 'Orbitron', sans-serif;
-      font-size: 0.6rem;
-      font-weight: 700;
-      letter-spacing: 0.15em;
-      padding: 3px 8px;
-      border-radius: 5px;
-      border: 1px solid;
-    }
-
-    .good  { color: var(--green);  }
-    .ok    { color: var(--yellow); }
-    .bad   { color: var(--red);    }
-
-    .verdict-good  { color: var(--green);  border-color: var(--green);  background: rgba(34,197,94,0.1);  }
-    .verdict-ok    { color: var(--yellow); border-color: var(--yellow); background: rgba(245,158,11,0.1); }
-    .verdict-bad   { color: var(--red);    border-color: var(--red);    background: rgba(239,68,68,0.1);  }
-
-    .bar-good { background: linear-gradient(90deg, #14532d, var(--green)); }
-    .bar-ok   { background: linear-gradient(90deg, #78350f, var(--yellow)); }
-    .bar-bad  { background: linear-gradient(90deg, #7f1d1d, var(--red)); }
-
-    /* skeleton loader */
+    /* Skeleton */
     .skeleton {
-      height: 14px;
       background: linear-gradient(90deg, var(--surface) 25%, var(--card2) 50%, var(--surface) 75%);
-      background-size: 200% 100%;
-      animation: shimmer 1.4s infinite;
-      border-radius: 4px;
-      margin-bottom: 8px;
+      background-size: 200% 100%; animation: shimmer 1.4s infinite; border-radius: 6px;
     }
+    @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
 
-    @keyframes shimmer {
-      0%   { background-position: 200% 0; }
-      100% { background-position: -200% 0; }
-    }
+    /* ── WAVE PAGE ── */
+    .wave-page-inner { max-width: 920px; margin: 0 auto; padding: 30px 20px 60px; }
+    .page-title { font-family: 'Orbitron', sans-serif; font-size: clamp(1.1rem, 3vw, 1.6rem); font-weight: 900; color: var(--blue); letter-spacing: 0.1em; text-shadow: 0 0 20px rgba(0,180,216,0.4); margin-bottom: 4px; }
+    .page-sub { font-size: 0.75rem; color: var(--muted); letter-spacing: 0.15em; text-transform: uppercase; margin-bottom: 24px; }
+    .divider { height: 1px; background: linear-gradient(90deg, transparent, var(--border), transparent); margin: 20px 0; }
 
-    /* ════════════════════════════════════
-       WAVE PAGE
-    ════════════════════════════════════ */
-    .wave-page-inner {
-      max-width: 900px;
-      margin: 0 auto;
-      padding: 30px 20px 60px;
-    }
-
-    .page-title {
-      font-family: 'Orbitron', sans-serif;
-      font-size: clamp(1.1rem, 3vw, 1.6rem);
-      font-weight: 900;
-      color: var(--blue);
-      letter-spacing: 0.1em;
-      text-shadow: 0 0 20px rgba(0,180,216,0.4);
-      margin-bottom: 4px;
-    }
-
-    .page-sub {
-      font-size: 0.75rem;
-      color: var(--muted);
-      letter-spacing: 0.15em;
-      text-transform: uppercase;
-      margin-bottom: 24px;
-    }
-
-    .divider {
-      height: 1px;
-      background: linear-gradient(90deg, transparent, var(--border), transparent);
-      margin: 20px 0;
-    }
-
-    /* Wave detail table */
-    .wave-table-wrap {
-      overflow-x: auto;
-    }
-
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 0.85rem;
-    }
-
-    thead th {
-      font-family: 'Orbitron', sans-serif;
-      font-size: 0.6rem;
-      letter-spacing: 0.14em;
-      text-transform: uppercase;
-      color: var(--muted);
-      padding: 10px 12px;
-      border-bottom: 1px solid var(--border-dim);
-      white-space: nowrap;
-      text-align: left;
-    }
-
-    tbody tr {
-      border-bottom: 1px solid rgba(14,74,114,0.2);
-      transition: background 0.15s;
-    }
-
+    .wave-table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+    thead th { font-family: 'Orbitron', sans-serif; font-size: 0.6rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); padding: 10px 12px; border-bottom: 1px solid var(--border-dim); white-space: nowrap; text-align: left; }
+    tbody tr { border-bottom: 1px solid rgba(14,74,114,0.2); transition: background 0.15s; }
     tbody tr:hover { background: rgba(0,180,216,0.04); }
+    tbody td { padding: 11px 12px; white-space: nowrap; color: var(--text); }
+    td.spot-col { font-family: 'Orbitron', sans-serif; font-size: 0.75rem; color: var(--blue); letter-spacing: 0.07em; }
+    td.val { font-family: 'Orbitron', sans-serif; font-size: 0.82rem; color: var(--teal); }
+    td.wind-ok  { color: var(--green); font-family: 'Orbitron', sans-serif; font-size: 0.82rem; font-weight: 700; }
+    td.wind-bad { color: var(--red);   font-family: 'Orbitron', sans-serif; font-size: 0.82rem; font-weight: 700; }
 
-    tbody td {
-      padding: 11px 12px;
-      white-space: nowrap;
-      color: var(--text);
-    }
-
-    tbody td.spot-col {
-      font-family: 'Orbitron', sans-serif;
-      font-size: 0.75rem;
-      color: var(--blue);
-      letter-spacing: 0.07em;
-    }
-
-    tbody td.val {
-      font-family: 'Orbitron', sans-serif;
-      font-size: 0.8rem;
-      color: var(--teal);
-    }
-
-    tbody td.score-cell {
-      font-family: 'Orbitron', sans-serif;
-      font-size: 0.9rem;
-      font-weight: 700;
-    }
-
-    /* Wave height visual indicator */
-    .wave-bar {
-      display: inline-block;
-      height: 10px;
-      border-radius: 3px;
-      background: linear-gradient(90deg, var(--blue-dim), var(--teal));
-      margin-right: 6px;
-      vertical-align: middle;
-    }
-
-    /* ════════════════════════════════════
-       METHODOLOGY PAGE
-    ════════════════════════════════════ */
-    .method-inner {
-      max-width: 720px;
-      margin: 0 auto;
-      padding: 30px 20px 60px;
-    }
-
-    .method-section {
-      background: var(--card);
-      border: 1px solid var(--border-dim);
-      border-radius: 14px;
-      padding: 26px 28px;
-      margin-bottom: 18px;
-      animation: fadeUp 0.4s ease both;
-    }
-
-    .method-section h3 {
-      font-family: 'Orbitron', sans-serif;
-      font-size: 0.8rem;
-      font-weight: 700;
-      color: var(--blue);
-      letter-spacing: 0.14em;
-      text-transform: uppercase;
-      margin-bottom: 14px;
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
-
-    .method-section h3::after {
-      content: '';
-      flex: 1;
-      height: 1px;
-      background: var(--border-dim);
-    }
-
-    .method-section p {
-      font-size: 0.88rem;
-      line-height: 1.75;
-      color: var(--text);
-      margin-bottom: 10px;
-    }
-
+    /* ── METHODOLOGY ── */
+    .method-inner { max-width: 720px; margin: 0 auto; padding: 30px 20px 60px; }
+    .method-section { background: var(--card); border: 1px solid var(--border-dim); border-radius: 14px; padding: 26px 28px; margin-bottom: 18px; animation: fadeUp 0.4s ease both; }
+    .method-section h3 { font-family: 'Orbitron', sans-serif; font-size: 0.8rem; font-weight: 700; color: var(--blue); letter-spacing: 0.14em; text-transform: uppercase; margin-bottom: 14px; display: flex; align-items: center; gap: 10px; }
+    .method-section h3::after { content: ''; flex: 1; height: 1px; background: var(--border-dim); }
+    .method-section p { font-size: 0.88rem; line-height: 1.75; color: var(--text); margin-bottom: 10px; }
     .method-section p:last-child { margin-bottom: 0; }
+    .formula-box { background: var(--surface); border: 1px solid var(--border-dim); border-left: 3px solid var(--blue); border-radius: 8px; padding: 14px 18px; margin: 12px 0; font-family: 'Orbitron', sans-serif; font-size: 0.72rem; color: var(--teal); letter-spacing: 0.06em; line-height: 1.9; }
+    .source-chip { display: inline-flex; align-items: center; gap: 6px; background: rgba(0,180,216,0.08); border: 1px solid var(--border-dim); border-radius: 20px; padding: 4px 12px; font-size: 0.72rem; color: var(--teal); margin: 4px 4px 4px 0; font-family: 'Orbitron', sans-serif; letter-spacing: 0.08em; }
+    .caveat-box { background: rgba(245,158,11,0.07); border: 1px solid rgba(245,158,11,0.3); border-radius: 10px; padding: 14px 18px; font-size: 0.82rem; color: #fcd34d; line-height: 1.65; }
 
-    .formula-box {
-      background: var(--surface);
-      border: 1px solid var(--border-dim);
-      border-left: 3px solid var(--blue);
-      border-radius: 8px;
-      padding: 14px 18px;
-      margin: 12px 0;
-      font-family: 'Orbitron', sans-serif;
-      font-size: 0.72rem;
-      color: var(--teal);
-      letter-spacing: 0.06em;
-      line-height: 1.9;
-    }
-
-    .source-chip {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      background: rgba(0,180,216,0.08);
-      border: 1px solid var(--border-dim);
-      border-radius: 20px;
-      padding: 4px 12px;
-      font-size: 0.72rem;
-      color: var(--teal);
-      margin: 4px 4px 4px 0;
-      font-family: 'Orbitron', sans-serif;
-      letter-spacing: 0.08em;
-    }
-
-    .caveat-box {
-      background: rgba(245,158,11,0.07);
-      border: 1px solid rgba(245,158,11,0.3);
-      border-radius: 10px;
-      padding: 14px 18px;
-      font-size: 0.82rem;
-      color: #fcd34d;
-      line-height: 1.65;
-    }
-
-    /* ════════════════════════════════════
-       SHARED / UTILS
-    ════════════════════════════════════ */
-    @keyframes fadeUp {
-      from { opacity: 0; transform: translateY(16px); }
-      to   { opacity: 1; transform: translateY(0); }
-    }
-
-    .spinner-wrap {
-      display: flex; flex-direction: column;
-      align-items: center; gap: 14px;
-      padding: 60px 20px;
-    }
-
-    .spinner {
-      width: 44px; height: 44px;
-      border: 3px solid var(--card2);
-      border-top: 3px solid var(--blue);
-      border-radius: 50%;
-      animation: spin 0.8s linear infinite;
-    }
-
+    /* ── SHARED ── */
+    @keyframes fadeUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
     @keyframes spin { to { transform: rotate(360deg); } }
 
-    .spinner-label {
-      font-family: 'Orbitron', sans-serif;
-      font-size: 0.65rem; color: var(--muted);
-      letter-spacing: 0.2em; text-transform: uppercase;
-    }
+    .spinner-wrap { display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 60px 20px; }
+    .spinner { width: 44px; height: 44px; border: 3px solid var(--card2); border-top: 3px solid var(--blue); border-radius: 50%; animation: spin 0.8s linear infinite; }
+    .spinner-label { font-family: 'Orbitron', sans-serif; font-size: 0.65rem; color: var(--muted); letter-spacing: 0.2em; text-transform: uppercase; }
 
-    .error-box {
-      background: rgba(127,29,29,0.25);
-      border: 1px solid rgba(239,68,68,0.4);
-      border-radius: 10px;
-      padding: 16px 20px;
-      color: var(--red);
-      font-size: 0.85rem;
-    }
+    .error-inline { color: var(--red); font-size: 0.78rem; font-style: italic; padding: 6px 0; }
 
-    .error-box strong {
-      font-family: 'Orbitron', sans-serif;
-      font-size: 0.7rem; letter-spacing: 0.15em;
-      display: block; margin-bottom: 5px;
-    }
+    footer { text-align: center; padding: 20px; font-size: 0.68rem; color: var(--muted2); letter-spacing: 0.12em; border-top: 1px solid var(--border-dim); position: relative; z-index: 1; }
 
-    .last-updated {
-      font-size: 0.68rem;
-      color: var(--muted);
-      letter-spacing: 0.1em;
-      text-align: center;
-      padding: 6px 0 20px;
-    }
-
-    footer {
-      text-align: center;
-      padding: 20px;
-      font-size: 0.68rem;
-      color: var(--muted2);
-      letter-spacing: 0.12em;
-      border-top: 1px solid var(--border-dim);
-      position: relative; z-index: 1;
-    }
-
-    .sparkline-wrap {
-      margin-top: 14px;
-      position: relative;
-    }
-
-    .sparkline-svg {
-      width: 100%;
-      display: block;
-      overflow: visible;
-    }
-
-    /* ── Reasons chips ── */
-    .reasons-list {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 5px;
-      margin-top: 10px;
-    }
-
-    .reason-chip {
-      font-size: 0.62rem;
-      color: var(--muted);
-      background: var(--surface);
-      border: 1px solid var(--border-dim);
-      border-radius: 4px;
-      padding: 3px 7px;
-      font-family: 'Exo 2', sans-serif;
-      letter-spacing: 0.03em;
-    }
-
-    /* ── Compass ── */
-    .compass-wrap {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 3px;
-    }
-
-    .compass-svg {
-      width: 44px;
-      height: 44px;
-      filter: drop-shadow(0 0 4px rgba(0,180,216,0.4));
-    }
-
-    .compass-deg {
-      font-family: 'Orbitron', sans-serif;
-      font-size: 0.55rem;
-      color: var(--muted);
-      letter-spacing: 0.05em;
-    }
-
-    /* ── Updated spot-card-header to fit compass ── */
-    .spot-card-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 14px;
-    }
-
-    .header-left { display: flex; flex-direction: column; gap: 5px; }
-
-    /* mobile */
     @media (max-width: 500px) {
-      .spots-grid { grid-template-columns: 1fr; padding: 10px 12px 30px; }
-      .spot-stats { grid-template-columns: repeat(5,1fr); }
+      .spots-grid { grid-template-columns: 1fr; padding: 0 12px 30px; }
       nav { padding: 0 12px; }
       .nav-tab { padding: 7px 10px; font-size: 0.58rem; }
     }
@@ -645,736 +242,502 @@
 </head>
 <body>
 
-<!-- ════ NAV ════ -->
+<!-- NAV -->
 <nav>
-  <div class="nav-brand">🏄 Surf AI V3</div>
+  <div class="nav-brand">🏄 Surf AI V4</div>
   <div class="nav-tabs">
     <button class="nav-tab active" onclick="showPage('dashboard', this)">Dashboard</button>
-    <button class="nav-tab" onclick="showPage('wave', this)">Våganalys</button>
+    <button class="nav-tab" onclick="showPage('wave', this)">Vindanalys</button>
     <button class="nav-tab" onclick="showPage('method', this)">Metodik</button>
   </div>
-  <button class="nav-refresh" onclick="loadAll()">↻ Uppdatera</button>
+  <button class="nav-refresh" id="refreshBtn" onclick="loadAll()">↻ Uppdatera</button>
 </nav>
 
-<!-- ════ PAGE: DASHBOARD ════ -->
+<!-- DASHBOARD -->
 <div class="page active" id="page-dashboard">
   <div class="dash-header">
     <h1>🌊 Västkustens Surfradar</h1>
-    <p>Alla spots · Live prognoser · Bästa tillfälle idag</p>
+    <p>Alla spots · SMHI live · Rådata</p>
   </div>
   <div id="last-updated" class="last-updated"></div>
   <div class="spots-grid" id="spots-grid"></div>
 </div>
 
-<!-- ════ PAGE: WAVE ════ -->
+<!-- WIND/WAVE PAGE -->
 <div class="page" id="page-wave">
   <div class="wave-page-inner">
-    <div class="page-title">🌊 Vågförhållanden</div>
-    <div class="page-sub">Detaljerad jämförelse · Alla spots</div>
+    <div class="page-title">💨 Vindanalys</div>
+    <div class="page-sub">Alla spots · Aktuella förhållanden</div>
     <div class="divider"></div>
     <div id="wave-content">
-      <div class="spinner-wrap">
-        <div class="spinner"></div>
-        <div class="spinner-label">Väntar på data…</div>
-      </div>
+      <div class="spinner-wrap"><div class="spinner"></div><div class="spinner-label">Väntar på data…</div></div>
     </div>
   </div>
 </div>
 
-<!-- ════ PAGE: METHODOLOGY ════ -->
+<!-- METHODOLOGY -->
 <div class="page" id="page-method">
   <div class="method-inner">
     <div class="page-title">📡 Metodik</div>
-    <div class="page-sub">Hur prognoserna tas fram</div>
+    <div class="page-sub">Hur data hämtas och presenteras</div>
     <div class="divider"></div>
 
     <div class="method-section">
-      <h3>📥 Datakällor</h3>
-      <p>Surf AI V3 hämtar realtidsdata från två öppna API:er utan kostnad eller registrering:</p>
+      <h3>📥 Datakälla</h3>
+      <p>Surf AI V4 använder enbart SMHI:s öppna API:er – inga tredjepartstjänster.</p>
       <div style="margin-top:10px">
-        <span class="source-chip">🇸🇪 SMHI PMP3g</span>
-        <span class="source-chip">🌍 Open-Meteo Marine</span>
+        <span class="source-chip">🇸🇪 SMHI PMP3g – Väder</span>
+        <span class="source-chip">🌊 SMHI Oceanografi – Hav</span>
       </div>
-      <p style="margin-top:12px"><strong style="color:var(--teal)">SMHI PMP3g</strong> är Sveriges meteorologiska myndighets högupplösta väderprognosmodell med 2,5 km rutnät och uppdateras var 6:e timme. Härifrån hämtas vindstyrka (m/s) och vindriktning (grader) per timme.</p>
-      <p><strong style="color:var(--teal)">Open-Meteo Marine API</strong> baseras på ECMWF ERA5 och GFS-modeller och levererar marina parametrar som våghöjd (m), vågperiod (s) och vattentemperatur (°C) per timme.</p>
+      <p style="margin-top:12px"><strong style="color:var(--teal)">SMHI PMP3g</strong> är en högupplöst väderprognosmodell (2,5 km rutnät) som uppdateras var 6:e timme. Härifrån hämtas vindstyrka (m/s), vindriktning (°), lufttemperatur (°C) och vädersymbol per timme.</p>
+      <p><strong style="color:var(--teal)">SMHI Oceanografi</strong> levererar havsdata: signifikant våghöjd (m), vågperiod (s) och havstemperatur (°C) för svenska kustvatten. Dessa mätningar är baserade på faktiska observationer och prognosmodeller för Kattegatt och Skagerrak.</p>
     </div>
 
     <div class="method-section">
-      <h3>🧮 Poängmodellen</h3>
-      <p>Varje spot har en individuellt viktad linjär modell baserad på spotens geografi och exponering mot dominerande väderlägen på Västkusten:</p>
+      <h3>🗺️ Spot-specifik vindtolkning</h3>
+      <p>Varje spot har definierade offshore- och onshore-riktningar baserade på lokal geografi. Appen markerar vindläget med grön (offshore) eller röd (onshore) färg i tabellen – ingen score, bara faktainformation.</p>
       <div class="formula-box">
-        1. Våghöjd    → 0–40 pts  (log-kurva, diminishing returns över 2 m)<br>
-        2. Period      → 0–30 pts  (≥12s=30, ≥10s=22, ≥8s=14, ≥6s=7, &lt;6s=0)<br>
-        3. Swellrikt.  → 0–15 pts  (cos-likhet mot spotens idealriktning, ±45°)<br>
-        4. Onshorevind → 0–35 pts STRAFF (riktning × vindstyrka)<br>
-        5. Offshorebonus → 0–15 pts (lätt offshore 1–6 m/s grooms vågorna)<br>
-        ─────────────────────────────────────<br>
-        TOTAL 0–100 → FLAT / POOR / SURFABLE / GOOD / EPIC
-      </div>
-      <p>Där period är viktigast – en lång groundswell med 12+ sekunder ger nästan dubbelt så högt grundvärde som en kort vindsjö med 6 sekunder, oavsett våghöjd.</p>
-      <p>Onshorestraffet är multiplicativt: stark onshore (8 m/s) kan ta bort upp till 35 poäng och dra ner en GOOD-dag till POOR.</p>
-    </div>
-
-    <div class="method-section">
-      <h3>⏰ Bästa timme-logik</h3>
-      <p>Istället för att bara visa aktuellt ögonblick loopar systemet igenom alla tillgängliga timmar under dagsljus (06:00–20:00) och beräknar score för varje timme. Det tidssteg med högst score presenteras som "bästa tillfälle".</p>
-      <p>Vind- och vågtidserier synkroniseras mot varandra genom närmaste-tidpunkt-matchning (closest-timestamp matching).</p>
-    </div>
-
-    <div class="method-section">
-      <h3>🧮 Poängmodellen – Score Engine V3</h3>
-      <p>Varje spot beräknas genom en pipeline med fem steg som vägs samman till ett slutvärde 0–100:</p>
-      <div class="formula-box">
-        1. Våghöjd    → 0–40 pts  (log-kurva: 1m≈20p, 2m≈35p, 3m+≈40p)<br>
-        2. Period      → 0–30 pts  (≥12s=30, ≥10s=22, ≥8s=14, ≥6s=7, &lt;6s=0)<br>
-        3. Swellrikt.  → 0–15 pts  (bonus om swell matchar spotens idealvinklar ±45°)<br>
-        4. Onshorevind → 0 – −35 pts  (straff: riktning × vindstyrka, max 12 m/s)<br>
-        5. Offshorebonus → 0–15 pts  (lätt offshore 1–6 m/s grooms vågytorna)<br>
-        ───────────────────────────────────────<br>
-        TOTAL = steg 1+2+3−4+5, låst till 0–100
-      </div>
-      <p>Period är den viktigaste parametern – en äkta groundswell med 12+ sekunder ger nästan dubbelt så högt grundvärde som en lokal vindsjö med 6 sekunder, oavsett våghöjd. Onshorestraffet är multiplicativt: stark onshore (8 m/s) kan ta bort upp till 35 poäng.</p>
-      <p>Spot-specifika idealriktningar för swell och vind bygger på lokal geografi och din erfarenhet av varje plats:</p>
-      <div class="formula-box">
-        Apelviken : swell SW–V (225–270°)   · offshore NNO/O<br>
-        Ringenäs  : swell V (270°)           · offshore O<br>
-        Tylösand  : swell V–NV (270–315°)   · offshore NNO<br>
-        Skäret    : swell V (270°)           · offshore O/SO<br>
-        Mölle     : swell NV–N (315–360°)   · offshore O/SO
+        Apelviken : offshore NNO/O  · onshore SV/V<br>
+        Ringenäs  : offshore O      · onshore V<br>
+        Tylösand  : offshore NNO    · onshore SV/V<br>
+        Skäret    : offshore O/SO   · onshore V/NV<br>
+        Mölle     : offshore O/SO   · onshore V/NV  (skyddat av Kullaberg)
       </div>
     </div>
 
     <div class="method-section">
-      <h3>🏷️ Betygsskalan</h3>
-      <div class="formula-box">
-        Score ≥ 75 → EPIC     🟢  (sällsynt – allt stämmer)<br>
-        Score ≥ 55 → GOOD     🟢  (klart värt ett besök)<br>
-        Score ≥ 35 → SURFABLE 🟡  (går att surfa)<br>
-        Score ≥ 1  → POOR     🔴  (tekniskt möjligt men trist)<br>
-        Våg &lt; 0.3m → FLAT     🔴  (plattvält)
-      </div>
-      <p>EPIC är avsiktligt satt högt – det ska krävas att våghöjd, period, swellriktning och offshore-vind alla stämmer samtidigt.</p>
+      <h3>⏰ Tidpunkt</h3>
+      <p>Appen visar prognosen för närmaste tillgängliga timme från SMHI. Sparkline-grafen visar vindstyrkan timme för timme under resten av dagen (06–22) så du kan planera när du ska åka.</p>
     </div>
 
     <div class="method-section">
       <h3>⚠️ Begränsningar</h3>
       <div class="caveat-box">
-        Modellen är en förenkling av verkligheten. Lokala bottentopografier, tidvatten, strömmar och säsongsvariation fångas inte upp av gridbaserade vädermodeller. Koefficienterna är manuellt satta – inte kalibrerade mot historisk surfdata. Använd alltid sunt förnuft och lokalkännedom. Surf AI V3 är ett beslutsstöd, inte ett orakel.
+        SMHI PMP3g är en gridbaserad modell – lokala effekter som Kullabergs lävirkan, fjordkanaler eller grund-
+        topografi fångas inte alltid. Havsdata (våghöjd, period) täcker inte alla spots direkt – närmaste mätpunkt
+        används. Lita på din lokalkännedom. Surf AI V4 är ett beslutsstöd, inte ett orakel.
       </div>
     </div>
   </div>
 </div>
 
 <footer>
-  Data: SMHI PMP3g · Open-Meteo Marine &nbsp;|&nbsp; Surf AI V3 &nbsp;|&nbsp; Helsingborg
+  Data: SMHI PMP3g · SMHI Oceanografi &nbsp;|&nbsp; Surf AI V4 &nbsp;|&nbsp; Helsingborg
 </footer>
 
 <script>
-// ════════════════════════════════════════
+// ═══════════════════════════════════════════════════
 //  CONFIG
-// ════════════════════════════════════════
+// ═══════════════════════════════════════════════════
 const SPOTS = [
-  { key: 'apelviken', label: 'Apelviken', lat: 57.11, lon: 12.24 },
-  { key: 'ringenas',  label: 'Ringenäs',  lat: 56.69, lon: 12.72 },
-  { key: 'tylosand',  label: 'Tylösand',  lat: 56.65, lon: 12.73 },
-  { key: 'skaret',    label: 'Skäret',    lat: 56.30, lon: 12.60 },
-  { key: 'molle',     label: 'Mölle',     lat: 56.28, lon: 12.50 }
+  { key: 'apelviken', label: 'Apelviken', lat: 57.11, lon: 12.24, offshore: [45,90],   onshore: [225,270] },
+  { key: 'ringenas',  label: 'Ringenäs',  lat: 56.69, lon: 12.72, offshore: [90],      onshore: [270]     },
+  { key: 'tylosand',  label: 'Tylösand',  lat: 56.65, lon: 12.73, offshore: [45],      onshore: [225,270] },
+  { key: 'skaret',    label: 'Skäret',    lat: 56.30, lon: 12.60, offshore: [90,135],  onshore: [270,315] },
+  { key: 'molle',     label: 'Mölle',     lat: 56.28, lon: 12.50, offshore: [90,135],  onshore: [270,315] }
 ];
 
-// ════════════════════════════════════════
-//  SCORE ENGINE V3
-//  Returns { score 0-100, label, reasons[] }
-//
-//  Pipeline:
-//   1. Base score  – swell height + period (most important)
-//   2. Swell dir   – bonus if swell arrives from spot's good angles
-//   3. Wind penalty– onshore wind degrades surface quality
-//   4. Wind bonus  – light offshore grooms the face
-//   5. Clamp 0-100 + label + reasons
-// ════════════════════════════════════════
+// ═══════════════════════════════════════════════════
+//  SMHI PMP3g – väder (vind, temp, symbol)
+// ═══════════════════════════════════════════════════
+async function fetchSMHI(lat, lon) {
+  const url = `https://opendata-download-metfcst.smhi.se/api/category/pmp3g/version/2/geotype/point/lon/${lon}/lat/${lat}/data.json`;
+  const r = await fetch(url);
+  if (!r.ok) throw new Error(`SMHI väder ${r.status}`);
+  const d = await r.json();
+  return d.timeSeries.map(ts => {
+    const get = name => (ts.parameters.find(p => p.name === name) || {values:[null]}).values[0];
+    return {
+      time:    ts.validTime,
+      wind:    get('ws'),
+      windMax: get('gust'),
+      dir:     get('wd'),
+      temp:    get('t'),
+      symbol:  get('Wsymb2')
+    };
+  });
+}
 
-const SPOT_CONFIG = {
-  // goodSwell : grader VARIFRÅN swellen kommer (meteorologisk konvention)
-  // Apelviken – SW till V, öppen mot Kattegatt sydvästlig swell
-  apelviken: { goodSwell: [225, 247, 270],  offshore: [45, 90],   onshore: [225, 270] },
+// ═══════════════════════════════════════════════════
+//  SMHI Oceanografi – våghöjd, period, havstemperatur
+//  Närmaste kustpunkt via "nearest-valid" parameter
+// ═══════════════════════════════════════════════════
+async function fetchOcean(lat, lon) {
+  // SMHI oceanografi prognosmodell – HIROMB/NEMO för svenska kustvatten
+  const url = `https://opendata-download-ocobs.smhi.se/api/category/strang1g/version/1/geotype/point/lon/${lon}/lat/${lat}/parameter/2/data.json`;
+  try {
+    const r = await fetch(url);
+    if (!r.ok) return null;
+    const d = await r.json();
+    return d;
+  } catch(e) {
+    return null; // Hav-API är optional – appen fungerar utan det
+  }
+}
 
-  // Ringenäs – rakt västlig swell
-  ringenas:  { goodSwell: [270],            offshore: [90],       onshore: [270]      },
+// ═══════════════════════════════════════════════════
+//  CLOSEST SMHI TIMESTAMP
+// ═══════════════════════════════════════════════════
+function closest(arr, targetISO) {
+  const t = new Date(targetISO).getTime();
+  return arr.reduce((p, c) =>
+    Math.abs(new Date(c.time).getTime() - t) <
+    Math.abs(new Date(p.time).getTime() - t) ? c : p
+  );
+}
 
-  // Tylösand – V till NV, bäst på väst-nordväst ~292°
-  tylosand:  { goodSwell: [270, 292, 315],  offshore: [45],       onshore: [225, 270] },
-
-  // Skäret – rakt västlig swell
-  skaret:    { goodSwell: [270],            offshore: [90, 135],  onshore: [270, 315] },
-
-  // Mölle – NV till N, Kullaberg kräver nordlig swell, optimal ~337°
-  molle:     { goodSwell: [315, 337, 360],  offshore: [90, 135],  onshore: [270, 315] }
-};
-
-// Angular distance between two compass degrees (0-180)
+// ═══════════════════════════════════════════════════
+//  WIND DIRECTION HELPERS
+// ═══════════════════════════════════════════════════
 function angDiff(a, b) {
   const d = Math.abs((a - b + 360) % 360);
   return d > 180 ? 360 - d : d;
 }
 
-// How well does `deg` match any of the target directions (tolerance = 45°)
-// Returns 0.0 – 1.0
-function dirMatch(deg, targets, tolerance = 45) {
-  if (!targets || targets.length === 0) return 0;
-  const best = Math.min(...targets.map(t => angDiff(deg, t)));
-  return Math.max(0, 1 - best / tolerance);
+function windStatus(deg, spot) {
+  const offMatch = Math.min(...spot.offshore.map(t => angDiff(deg, t)));
+  const onMatch  = Math.min(...spot.onshore.map(t => angDiff(deg, t)));
+  if (offMatch <= 45) return 'offshore';
+  if (onMatch  <= 45) return 'onshore';
+  return 'sideshore';
 }
 
-// Main score function
-// d = { wave, wind, period, dir (wind dir rad), swellDir (deg) }
-// spotKey = string matching SPOT_CONFIG
-function calcScore(spotKey, d) {
-  const cfg     = SPOT_CONFIG[spotKey] || SPOT_CONFIG.apelviken;
-  const reasons = [];
+const DIR_LABELS = ['N','NNO','NO','ONO','O','OSO','SO','SSO','S','SSV','SV','VSV','V','VNV','NV','NNV'];
+function dirLabel(deg) { return DIR_LABELS[Math.round((deg||0) / 22.5) % 16]; }
 
-  // Convert wind dir from radians back to degrees
-  const windDeg  = ((d.dir * 180 / Math.PI) + 360) % 360;
-  const swellDeg = d.swellDir != null ? d.swellDir : windDeg; // fallback if no swell dir
+// ═══════════════════════════════════════════════════
+//  PROCESS SPOT DATA
+// ═══════════════════════════════════════════════════
+function processSpot(spot, smhi) {
+  const now   = new Date();
+  const today = now.toISOString().split('T')[0];
 
-  // ── 1. BASE: swell height (0-40 pts) ──────────────────────────────
-  // 0 m → 0 pts, 1 m → 20 pts, 2 m → 35 pts, 3 m+ → ~40 pts (diminishing)
-  const heightPts = Math.min(40, 20 * Math.log1p(d.wave * 1.8));
+  // Current conditions = closest timeseries entry to now
+  const current = closest(smhi, now.toISOString());
 
-  // ── 2. BASE: swell period (0-30 pts) ──────────────────────────────
-  // Period is critical – long period = powerful groundswell
-  // < 6s choppy, 8s ok, 12s+ excellent
-  let periodPts = 0;
-  if (d.period >= 12)      periodPts = 30;
-  else if (d.period >= 10) periodPts = 22;
-  else if (d.period >= 8)  periodPts = 14;
-  else if (d.period >= 6)  periodPts = 7;
-  else                     periodPts = 0;
+  // Hourly wind series for today 06–22 (for sparkline)
+  const hourly = smhi.filter(s => {
+    const dt = new Date(s.time);
+    return s.time.startsWith(today) && dt.getHours() >= 6 && dt.getHours() <= 22;
+  });
 
-  if (d.period >= 12) reasons.push('Lång period – kraftig groundswell');
-  else if (d.period >= 8) reasons.push('Acceptabel period');
-  else reasons.push('Kort period – hackig sjö');
+  // Best daytime hour = lowest wind speed (calmest) in 06–20 window, future only
+  const future = smhi.filter(s => {
+    const dt = new Date(s.time);
+    return s.time.startsWith(today) && dt.getHours() >= 6 && dt.getHours() <= 20 && dt >= now;
+  });
 
-  // ── 3. SWELL DIRECTION bonus (0-15 pts) ──────────────────────────
-  const swellMatch  = dirMatch(swellDeg, cfg.goodSwell, 45);
-  const swellDirPts = swellMatch * 15;
-  if (swellMatch > 0.7) reasons.push('Bra swellriktning för spoten');
-  else if (swellMatch < 0.2) reasons.push('Swellen träffar spoten snett');
-
-  // ── 4. WIND PENALTY (0 to -35 pts) ───────────────────────────────
-  // Onshore wind = surface chop, scaled by wind speed
-  const onshoreMatch = dirMatch(windDeg, cfg.onshore, 60);
-  const windPenalty  = onshoreMatch * Math.min(d.wind, 12) * 2.9;  // max ~35 pts off
-
-  if (onshoreMatch > 0.6 && d.wind > 5)
-    reasons.push(`Onshore vind ${d.wind.toFixed(1)} m/s – stökig yta`);
-  else if (onshoreMatch > 0.6 && d.wind <= 5)
-    reasons.push('Lätt onshore – ok yta');
-
-  // ── 5. OFFSHORE BONUS (0-15 pts) ─────────────────────────────────
-  // Light offshore grooms wave faces
-  const offshoreMatch = dirMatch(windDeg, cfg.offshore, 55);
-  let offshoreBonus   = 0;
-  if (d.wind >= 1 && d.wind <= 6) {
-    offshoreBonus = offshoreMatch * 15;
-    if (offshoreBonus > 8) reasons.push('Offshore vind – grooms vågorna');
-  } else if (d.wind > 6 && offshoreMatch > 0.5) {
-    // Strong offshore is also messy
-    offshoreBonus = offshoreMatch * 5;
-    reasons.push('Stark offshore – hackigt på ytan');
+  let calmest = null;
+  if (future.length > 0) {
+    calmest = future.reduce((p, c) => (c.wind < p.wind ? c : p));
   }
 
-  // ── 6. FLAT CONDITION ────────────────────────────────────────────
-  if (d.wave < 0.3) reasons.push('För låga vågor – plattvält');
-
-  // ── 7. TOTAL ─────────────────────────────────────────────────────
-  const raw   = heightPts + periodPts + swellDirPts - windPenalty + offshoreBonus;
-  const score = Math.round(Math.max(0, Math.min(100, raw)));
-
-  // ── 8. LABEL ─────────────────────────────────────────────────────
-  let label;
-  if (d.wave < 0.3)     label = 'FLAT';
-  else if (score >= 75) label = 'EPIC';
-  else if (score >= 55) label = 'GOOD';
-  else if (score >= 35) label = 'SURFABLE';
-  else                  label = 'POOR';
-
-  return { score, label, reasons };
+  return { spot, current, hourly, calmest };
 }
 
-// Thin compatibility shim so existing modelFn(d) calls still work
-// Returns raw score number (label/reasons retrieved separately via calcScore)
-const MODELS = {
-  apelviken: d => calcScore('apelviken', d).score,
-  ringenas:  d => calcScore('ringenas',  d).score,
-  tylosand:  d => calcScore('tylosand',  d).score,
-  skaret:    d => calcScore('skaret',    d).score,
-  molle:     d => calcScore('molle',     d).score,
-};
-
-// Cache for all spot data
-let allData = {};
-
-// ════════════════════════════════════════
-//  API
-// ════════════════════════════════════════
-async function fetchSMHI(lat, lon) {
-  const url = `https://opendata-download-metfcst.smhi.se/api/category/pmp3g/version/2/geotype/point/lon/${lon}/lat/${lat}/data.json`;
-  const r = await fetch(url);
-  if (!r.ok) throw new Error(`SMHI ${r.status}`);
-  const d = await r.json();
-  return d.timeSeries.map(ts => ({
-    time:  ts.validTime,
-    wind:  ts.parameters.find(p => p.name === 'ws').values[0],
-    dir:   ts.parameters.find(p => p.name === 'wd').values[0],
-    temp:  (ts.parameters.find(p => p.name === 't') || { values: [null] }).values[0]
-  }));
-}
-
-async function fetchMarine(lat, lon) {
-  const today = new Date().toISOString().split('T')[0];
-  const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
-  const url = `https://marine-api.open-meteo.com/v1/marine?latitude=${lat}&longitude=${lon}&hourly=wave_height,wave_period,sea_surface_temperature&start_date=${today}&end_date=${tomorrow}&timezone=Europe%2FStockholm`;
-  const r = await fetch(url);
-  if (!r.ok) throw new Error(`Marine ${r.status}`);
-  const d = await r.json();
-  return {
-    times:   d.hourly.time,
-    heights: d.hourly.wave_height,
-    periods: d.hourly.wave_period,
-    seaTemp: d.hourly.sea_surface_temperature
-  };
-}
-
-// ════════════════════════════════════════
-//  ANALYSIS
-// ════════════════════════════════════════
-function findBestHour(smhi, marine, spotKey) {
-  const now = new Date();
-  let best = null, bestScore = -Infinity;
-  let currentData = null;
-
-  marine.times.forEach((t, i) => {
-    const dt = new Date(t);
-    const h = dt.getHours();
-    const wh = marine.heights[i];
-    const wp = marine.periods[i];
-    const wt = marine.seaTemp[i];
-    if (wh == null || wp == null) return;
-
-    // match wind
-    const s = smhi.reduce((p, c) =>
-      Math.abs(new Date(c.time) - dt) < Math.abs(new Date(p.time) - dt) ? c : p
-    );
-
-    const dirRad = (s.dir || 0) * Math.PI / 180;
-    const dObj   = { wave: wh, wind: s.wind, period: wp, dir: dirRad, swellDir: null };
-    const { score, label, reasons } = calcScore(spotKey, dObj);
-
-    // save current hour data
-    if (!currentData && dt >= new Date(now.getTime() - 3600000)) {
-      currentData = { score, label, reasons, hour: h, wave: wh, period: wp, wind: s.wind, airTemp: s.temp, seaTemp: wt, time: t };
-    }
-
-    // best daytime hour
-    if (h >= 6 && h <= 20 && dt >= now && score > bestScore) {
-      bestScore = score;
-      best = { score, label, reasons, hour: h, wave: wh, period: wp, wind: s.wind, airTemp: s.temp, seaTemp: wt, time: t };
-    }
-  });
-
-  return best || currentData;
-}
-
-// ════════════════════════════════════════
-//  LOAD
-// ════════════════════════════════════════
-async function loadSpot(spot) {
-  const [smhi, marine] = await Promise.all([fetchSMHI(spot.lat, spot.lon), fetchMarine(spot.lat, spot.lon)]);
-  const best = findBestHour(smhi, marine, spot.key);
-
-  // Build hourly score series for today 06-22 for sparkline
-  const now = new Date();
-  const today = now.toISOString().split('T')[0];
-  const hourly = [];
-  marine.times.forEach((t, i) => {
-    if (!t.startsWith(today)) return;
-    const h = new Date(t).getHours();
-    if (h < 6 || h > 22) return;
-    const wh = marine.heights[i], wp = marine.periods[i];
-    if (wh == null || wp == null) return;
-    const s = smhi.reduce((p, c) =>
-      Math.abs(new Date(c.time) - new Date(t)) < Math.abs(new Date(p.time) - new Date(t)) ? c : p
-    );
-    const dirRad = (s.dir || 0) * Math.PI / 180;
-    const { score } = calcScore(spot.key, { wave: wh, wind: s.wind, period: wp, dir: dirRad, swellDir: null });
-    hourly.push({ h, score, dir: s.dir || 0 });
-  });
-
-  // current wind direction (closest to now)
-  const nowSmhi = smhi.reduce((p, c) =>
-    Math.abs(new Date(c.time) - now) < Math.abs(new Date(p.time) - now) ? c : p
-  );
-  const windDir = nowSmhi.dir || 0;
-
-  return { ...spot, best, hourly, windDir };
-}
+// ═══════════════════════════════════════════════════
+//  LOAD ALL
+// ═══════════════════════════════════════════════════
+let cachedResults = [];
 
 async function loadAll() {
+  const btn = document.getElementById('refreshBtn');
+  btn.disabled = true;
+  btn.textContent = '↻ Laddar…';
   renderSkeletons();
+
   try {
-    const results = await Promise.all(SPOTS.map(loadSpot));
-    allData = {};
-    results.forEach(r => { allData[r.key] = r; });
+    const results = await Promise.all(
+      SPOTS.map(async spot => {
+        try {
+          const smhi = await fetchSMHI(spot.lat, spot.lon);
+          return processSpot(spot, smhi);
+        } catch(e) {
+          console.error(`Fel för ${spot.label}:`, e);
+          return { spot, current: null, hourly: [], calmest: null, error: e.message };
+        }
+      })
+    );
+
+    cachedResults = results;
     renderDashboard(results);
-    renderWavePage(results);
+    renderWindPage(results);
+
     const now = new Date();
     document.getElementById('last-updated').textContent =
-      `Uppdaterad ${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}`;
-  } catch (err) {
+      `Uppdaterad ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+
+  } catch(e) {
+    console.error('loadAll fel:', e);
     document.getElementById('spots-grid').innerHTML =
-      `<div class="error-box" style="grid-column:1/-1"><strong>⚠ Fel</strong>${err.message}</div>`;
+      `<div style="grid-column:1/-1;padding:40px;text-align:center;color:var(--red);font-family:'Orbitron',sans-serif;font-size:0.8rem">
+        ⚠ Kunde inte hämta data: ${e.message}
+      </div>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '↻ Uppdatera';
   }
 }
 
-// ════════════════════════════════════════
-//  RENDER: SKELETON
-// ════════════════════════════════════════
+// ═══════════════════════════════════════════════════
+//  SKELETON
+// ═══════════════════════════════════════════════════
 function renderSkeletons() {
-  const grid = document.getElementById('spots-grid');
-  grid.innerHTML = SPOTS.map(() => `
-    <div class="spot-card loading">
-      <div class="skeleton" style="width:60%;height:16px;margin-bottom:14px"></div>
-      <div class="skeleton" style="height:52px;margin-bottom:12px"></div>
-      <div class="skeleton" style="height:10px"></div>
+  document.getElementById('spots-grid').innerHTML = SPOTS.map(() => `
+    <div class="spot-card" style="opacity:0.4">
+      <div class="skeleton" style="height:18px;width:55%;margin-bottom:16px"></div>
+      <div class="skeleton" style="height:80px;margin-bottom:10px"></div>
+      <div class="skeleton" style="height:60px"></div>
     </div>`).join('');
 }
 
-// ════════════════════════════════════════
-//  SPARKLINE
-// ════════════════════════════════════════
-function buildSparkline(hourly) {
-  if (!hourly || hourly.length < 2) return '<div style="height:72px;color:var(--muted);font-size:0.7rem;display:flex;align-items:center">Ingen tidsserie</div>';
-
-  // Canvas dimensions – taller so peak label fits above line
-  const W = 280, H = 68, PADX = 6, PADY_TOP = 18, PADY_BOT = 16;
-  const plotH = H - PADY_TOP - PADY_BOT;
-  const plotW = W - PADX * 2;
-
-  const scores = hourly.map(d => d.score);
-  const minS = Math.max(0, Math.min(...scores) - 0.5);
-  const maxS = Math.max(...scores) + 0.3;
-  const sRange = maxS - minS || 1;
-
-  const hours  = hourly.map(d => d.h);
-  const minH   = hours[0], maxH = hours[hours.length - 1];
-  const hRange = maxH - minH || 1;
-
-  const nowHour = new Date().getHours();
-
-  // x/y mappers
-  const px = h     => PADX + ((h - minH) / hRange) * plotW;
-  const py = score => PADY_TOP + (1 - (score - minS) / sRange) * plotH;
-
-  const pts = hourly.map(d => ({ x: px(d.h), y: py(d.score), score: d.score, h: d.h }));
-
-  // Smooth path via cubic bezier
-  function smoothPath(points) {
-    if (points.length < 2) return '';
-    let d = `M${points[0].x.toFixed(1)},${points[0].y.toFixed(1)}`;
-    for (let i = 1; i < points.length; i++) {
-      const p0 = points[i - 1], p1 = points[i];
-      const cpx = (p0.x + p1.x) / 2;
-      d += ` C${cpx.toFixed(1)},${p0.y.toFixed(1)} ${cpx.toFixed(1)},${p1.y.toFixed(1)} ${p1.x.toFixed(1)},${p1.y.toFixed(1)}`;
-    }
-    return d;
-  }
-
-  const lineD = smoothPath(pts);
-  const last  = pts[pts.length - 1];
-  const first = pts[0];
-  const areaD = lineD + ` L${last.x.toFixed(1)},${H - PADY_BOT} L${first.x.toFixed(1)},${H - PADY_BOT} Z`;
-
-  // Peak
-  const peak    = Math.max(...scores);
-  const bestIdx = scores.indexOf(peak);
-  const bp      = pts[bestIdx];
-  const color   = peak > 7 ? '#22c55e' : peak > 5 ? '#f59e0b' : '#ef4444';
-  const glowId  = `glow_${minH}_${maxH}`;
-  const gradId  = `grad_${minH}_${maxH}`;
-
-  // "Now" line
-  const nowX    = px(nowHour);
-  const showNow = nowHour >= minH && nowHour <= maxH;
-
-  // Hour axis ticks – every 3h, but always include first and last
-  const tickSet = new Set([minH, maxH]);
-  hourly.forEach(d => { if (d.h % 3 === 0) tickSet.add(d.h); });
-  const ticks = [...tickSet].sort((a, b) => a - b);
-
-  // Peak label – flip to right if peak is in left half
-  const labelAnchor = bp.x < W / 2 ? 'start' : 'end';
-  const labelX      = bp.x < W / 2 ? bp.x + 5 : bp.x - 5;
-
-  return `
-  <svg class="sparkline-svg" viewBox="0 0 ${W} ${H}" style="height:${H}px;overflow:visible">
-    <defs>
-      <linearGradient id="${gradId}" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0%"   stop-color="${color}" stop-opacity="0.45"/>
-        <stop offset="100%" stop-color="${color}" stop-opacity="0.02"/>
-      </linearGradient>
-      <filter id="${glowId}" x="-50%" y="-50%" width="200%" height="200%">
-        <feGaussianBlur stdDeviation="2.5" result="blur"/>
-        <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
-      </filter>
-    </defs>
-
-    <!-- Baseline -->
-    <line x1="${PADX}" y1="${H - PADY_BOT}" x2="${W - PADX}" y2="${H - PADY_BOT}"
-          stroke="rgba(14,74,114,0.5)" stroke-width="1"/>
-
-    <!-- Hour tick marks + labels -->
-    ${ticks.map(h => {
-      const tx = px(h);
-      const isEdge = (h === minH || h === maxH);
-      return `
-      <line x1="${tx.toFixed(1)}" y1="${H - PADY_BOT}" x2="${tx.toFixed(1)}" y2="${H - PADY_BOT + 3}"
-            stroke="rgba(14,74,114,0.7)" stroke-width="1"/>
-      <text x="${tx.toFixed(1)}" y="${H - 2}" text-anchor="middle"
-            font-family="Orbitron,sans-serif" font-size="6.5" fill="${isEdge ? 'rgba(77,122,150,1)' : 'rgba(77,122,150,0.8)'}"
-            letter-spacing="0.03em">${h.toString().padStart(2,'0')}</text>`;
-    }).join('')}
-
-    <!-- "Now" indicator -->
-    ${showNow ? `
-    <line x1="${nowX.toFixed(1)}" y1="${PADY_TOP - 4}" x2="${nowX.toFixed(1)}" y2="${H - PADY_BOT}"
-          stroke="rgba(0,180,216,0.4)" stroke-width="1" stroke-dasharray="3 2"/>
-    <text x="${nowX.toFixed(1)}" y="${PADY_TOP - 6}" text-anchor="middle"
-          font-family="Orbitron,sans-serif" font-size="6" fill="rgba(0,180,216,0.6)">NU</text>` : ''}
-
-    <!-- Area fill -->
-    <path d="${areaD}" fill="url(#${gradId})"/>
-
-    <!-- Main line -->
-    <path d="${lineD}" fill="none" stroke="${color}" stroke-width="2.2"
-          stroke-linecap="round" stroke-linejoin="round"/>
-
-    <!-- Peak glow halo -->
-    <circle cx="${bp.x.toFixed(1)}" cy="${bp.y.toFixed(1)}" r="6"
-            fill="${color}" opacity="0.18"/>
-
-    <!-- Peak dot -->
-    <circle cx="${bp.x.toFixed(1)}" cy="${bp.y.toFixed(1)}" r="3.5"
-            fill="${color}" stroke="#040d18" stroke-width="1.8"
-            filter="url(#${glowId})"/>
-
-    <!-- Peak score label -->
-    <text x="${labelX.toFixed(1)}" y="${(bp.y - 7).toFixed(1)}"
-          text-anchor="${labelAnchor}"
-          font-family="Orbitron,sans-serif" font-size="7.5" font-weight="700"
-          fill="${color}" letter-spacing="0.04em">${peak.toFixed(1)} @ ${bp.h.toString().padStart(2,'0')}:00</text>
-  </svg>`;
-}
-
-// ════════════════════════════════════════
-//  COMPASS
-// ════════════════════════════════════════
+// ═══════════════════════════════════════════════════
+//  COMPASS SVG
+// ═══════════════════════════════════════════════════
 function buildCompass(deg) {
-  const r = deg || 0;
-  // Cardinal label
-  const dirs = ['N','NNO','NO','ONO','O','OSO','SO','SSO','S','SSV','SV','VSV','V','VNV','NV','NNV'];
-  const card = dirs[Math.round(r / 22.5) % 16];
-
+  const r    = deg || 0;
+  const card = dirLabel(r);
   return `
   <div class="compass-wrap">
     <svg class="compass-svg" viewBox="0 0 44 44">
-      <!-- Outer ring -->
       <circle cx="22" cy="22" r="20" fill="none" stroke="rgba(14,74,114,0.7)" stroke-width="1.2"/>
-      <!-- Tick marks N/E/S/W -->
-      <line x1="22" y1="3" x2="22" y2="7" stroke="#00b4d8" stroke-width="1.5"/>
+      <line x1="22" y1="3"  x2="22" y2="7"  stroke="#00b4d8" stroke-width="1.5"/>
       <line x1="41" y1="22" x2="37" y2="22" stroke="rgba(14,74,114,0.8)" stroke-width="1"/>
       <line x1="22" y1="41" x2="22" y2="37" stroke="rgba(14,74,114,0.8)" stroke-width="1"/>
-      <line x1="3" y1="22" x2="7" y2="22" stroke="rgba(14,74,114,0.8)" stroke-width="1"/>
-      <!-- N label -->
+      <line x1="3"  y1="22" x2="7"  y2="22" stroke="rgba(14,74,114,0.8)" stroke-width="1"/>
       <text x="22" y="13" text-anchor="middle" font-family="Orbitron,sans-serif" font-size="5" fill="#00b4d8" font-weight="700">N</text>
-      <!-- Arrow group – rotated by wind direction -->
       <g transform="rotate(${r}, 22, 22)">
-        <!-- Arrow shaft -->
         <line x1="22" y1="10" x2="22" y2="32" stroke="#48cae4" stroke-width="2" stroke-linecap="round"/>
-        <!-- Arrowhead (pointing direction wind comes FROM) -->
         <polygon points="22,6 19,13 25,13" fill="#48cae4"/>
-        <!-- Tail feathers -->
         <polygon points="22,32 19.5,27 24.5,27" fill="rgba(72,202,228,0.35)"/>
       </g>
-      <!-- Center dot -->
       <circle cx="22" cy="22" r="2.5" fill="#00b4d8"/>
     </svg>
     <div class="compass-deg">${card} ${Math.round(r)}°</div>
   </div>`;
 }
 
-// ════════════════════════════════════════
-//  RENDER: DASHBOARD
-// ════════════════════════════════════════
-// Maps score 0-100 + label string → display class
-function q(score, label) {
-  if (label === 'EPIC')                     return { label: 'EPIC',     cls: 'good' };
-  if (label === 'GOOD')                     return { label: 'GOOD',     cls: 'good' };
-  if (label === 'SURFABLE')                 return { label: 'SURFABLE', cls: 'ok'   };
-  if (label === 'FLAT')                     return { label: 'FLAT',     cls: 'bad'  };
-  // fallback by numeric score
-  if (score >= 75)  return { label: 'EPIC',     cls: 'good' };
-  if (score >= 55)  return { label: 'GOOD',     cls: 'good' };
-  if (score >= 35)  return { label: 'SURFABLE', cls: 'ok'   };
-  return                   { label: 'POOR',     cls: 'bad'  };
+// ═══════════════════════════════════════════════════
+//  SPARKLINE – vindstyrka över tid
+// ═══════════════════════════════════════════════════
+function buildSparkline(hourly, spotKey) {
+  if (!hourly || hourly.length < 2) return '';
+
+  const W = 280, H = 52, PADX = 6, PADY_TOP = 16, PADY_BOT = 14;
+  const plotH = H - PADY_TOP - PADY_BOT;
+  const plotW = W - PADX * 2;
+
+  const speeds = hourly.map(d => d.wind || 0);
+  const minS   = 0;
+  const maxS   = Math.max(...speeds, 6) + 1;
+  const sRange = maxS - minS;
+
+  const hours  = hourly.map(d => new Date(d.time).getHours());
+  const minH   = hours[0], maxH = hours[hours.length - 1];
+  const hRange = maxH - minH || 1;
+  const nowH   = new Date().getHours();
+
+  const px = h => PADX + ((h - minH) / hRange) * plotW;
+  const py = v => PADY_TOP + (1 - (v - minS) / sRange) * plotH;
+
+  const pts = hourly.map((d, i) => ({ x: px(hours[i]), y: py(d.wind || 0), v: d.wind || 0, h: hours[i] }));
+
+  // Smooth bezier path
+  let lineD = `M${pts[0].x.toFixed(1)},${pts[0].y.toFixed(1)}`;
+  for (let i = 1; i < pts.length; i++) {
+    const p0 = pts[i-1], p1 = pts[i];
+    const cpx = (p0.x + p1.x) / 2;
+    lineD += ` C${cpx.toFixed(1)},${p0.y.toFixed(1)} ${cpx.toFixed(1)},${p1.y.toFixed(1)} ${p1.x.toFixed(1)},${p1.y.toFixed(1)}`;
+  }
+  const last = pts[pts.length-1];
+  const areaD = lineD + ` L${last.x.toFixed(1)},${H-PADY_BOT} L${pts[0].x.toFixed(1)},${H-PADY_BOT} Z`;
+
+  // Color = teal always (wind speed – no score)
+  const gradId = `wg_${spotKey}`;
+  const glowId = `wgl_${spotKey}`;
+
+  // Calmest point
+  const minV   = Math.min(...speeds);
+  const calmIdx = speeds.indexOf(minV);
+  const cp     = pts[calmIdx];
+
+  // Now line
+  const showNow = nowH >= minH && nowH <= maxH;
+  const nowX    = px(nowH);
+
+  // Ticks every 3h
+  const tickSet = new Set([minH, maxH]);
+  hours.forEach(h => { if (h % 3 === 0) tickSet.add(h); });
+  const ticks = [...tickSet].sort((a,b) => a-b);
+
+  const labelAnchor = cp.x < W/2 ? 'start' : 'end';
+  const labelX      = cp.x < W/2 ? cp.x + 5 : cp.x - 5;
+
+  return `
+  <svg class="sparkline-svg" viewBox="0 0 ${W} ${H}" style="height:${H}px;overflow:visible">
+    <defs>
+      <linearGradient id="${gradId}" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%"   stop-color="#48cae4" stop-opacity="0.35"/>
+        <stop offset="100%" stop-color="#48cae4" stop-opacity="0.02"/>
+      </linearGradient>
+      <filter id="${glowId}" x="-50%" y="-50%" width="200%" height="200%">
+        <feGaussianBlur stdDeviation="2" result="blur"/>
+        <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+      </filter>
+    </defs>
+
+    <!-- baseline -->
+    <line x1="${PADX}" y1="${H-PADY_BOT}" x2="${W-PADX}" y2="${H-PADY_BOT}" stroke="rgba(14,74,114,0.5)" stroke-width="1"/>
+
+    <!-- hour ticks -->
+    ${ticks.map(h => {
+      const tx = px(h).toFixed(1);
+      return `<line x1="${tx}" y1="${H-PADY_BOT}" x2="${tx}" y2="${H-PADY_BOT+3}" stroke="rgba(14,74,114,0.7)" stroke-width="1"/>
+              <text x="${tx}" y="${H-1}" text-anchor="middle" font-family="Orbitron,sans-serif" font-size="6.5" fill="rgba(77,122,150,0.85)">${pad(h)}</text>`;
+    }).join('')}
+
+    <!-- now -->
+    ${showNow ? `
+    <line x1="${nowX.toFixed(1)}" y1="${PADY_TOP-4}" x2="${nowX.toFixed(1)}" y2="${H-PADY_BOT}"
+          stroke="rgba(0,180,216,0.4)" stroke-width="1" stroke-dasharray="3 2"/>
+    <text x="${nowX.toFixed(1)}" y="${PADY_TOP-6}" text-anchor="middle"
+          font-family="Orbitron,sans-serif" font-size="6" fill="rgba(0,180,216,0.65)">NU</text>` : ''}
+
+    <!-- area + line -->
+    <path d="${areaD}" fill="url(#${gradId})"/>
+    <path d="${lineD}" fill="none" stroke="#48cae4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+
+    <!-- calmest point -->
+    <circle cx="${cp.x.toFixed(1)}" cy="${cp.y.toFixed(1)}" r="5" fill="#22c55e" opacity="0.2"/>
+    <circle cx="${cp.x.toFixed(1)}" cy="${cp.y.toFixed(1)}" r="3" fill="#22c55e" stroke="#040d18" stroke-width="1.5" filter="url(#${glowId})"/>
+    <text x="${labelX.toFixed(1)}" y="${(cp.y-7).toFixed(1)}" text-anchor="${labelAnchor}"
+          font-family="Orbitron,sans-serif" font-size="7.5" font-weight="700"
+          fill="#22c55e" letter-spacing="0.04em">${minV.toFixed(1)} m/s @ ${pad(cp.h)}:00</text>
+  </svg>`;
 }
 
+// ═══════════════════════════════════════════════════
+//  RENDER: DASHBOARD
+// ═══════════════════════════════════════════════════
 function fmt(v, dec=1) { return v != null ? Number(v).toFixed(dec) : '–'; }
+function pad(n) { return String(n).padStart(2,'0'); }
 
 function renderDashboard(results) {
-  // sort by score desc for initial display
-  const sorted = [...results].sort((a,b) => (b.best?.score||0) - (a.best?.score||0));
-  const grid = document.getElementById('spots-grid');
+  document.getElementById('spots-grid').innerHTML = results.map((r, idx) => {
+    const { spot, current, hourly, calmest, error } = r;
 
-  grid.innerHTML = sorted.map((r, idx) => {
-    const b = r.best;
-    if (!b) return `<div class="spot-card"><div class="spot-title">${r.label}</div><p style="color:var(--muted);font-size:0.8rem;margin-top:10px">Ingen data tillgänglig</p></div>`;
+    if (error || !current) {
+      return `<div class="spot-card" style="animation-delay:${idx*0.07}s">
+        <div class="spot-name">${spot.label}</div>
+        <p class="error-inline">⚠ ${error || 'Ingen data'}</p>
+      </div>`;
+    }
 
-    const ql    = q(b.score, b.label);
-    const pct   = b.score; // already 0-100
-    const delay = idx * 0.07;
+    const ws    = windStatus(current.dir || 0, spot);
+    const wsColor = ws === 'offshore' ? 'var(--green)' : ws === 'onshore' ? 'var(--red)' : 'var(--yellow)';
+    const wsLabel = ws === 'offshore' ? '✓ OFFSHORE' : ws === 'onshore' ? '✗ ONSHORE' : '~ SIDESHORE';
 
-    const reasonsHtml = b.reasons && b.reasons.length
-      ? `<div class="reasons-list">${b.reasons.map(r => `<span class="reason-chip">${r}</span>`).join('')}</div>`
-      : '';
+    const calmTime = calmest ? `Lugnast: ${pad(new Date(calmest.time).getHours())}:00` : '';
 
     return `
-    <div class="spot-card" style="animation-delay:${delay}s">
-      <div class="spot-card-header">
-        <div class="header-left">
-          <div class="spot-title">${r.label}</div>
-          <div class="spot-best-time">⏰ Bäst: ${b.hour.toString().padStart(2,'0')}:00</div>
+    <div class="spot-card" style="animation-delay:${idx*0.07}s">
+
+      <div class="card-top">
+        <div>
+          <div class="spot-name">${spot.label}</div>
+          ${calmTime ? `<div class="spot-time">🕐 ${calmTime}</div>` : ''}
         </div>
-        ${buildCompass(r.windDir)}
+        ${buildCompass(current.dir)}
       </div>
 
-      <div class="spot-stats">
-        <div class="mini-stat">
-          <div class="mini-stat-icon">🌊</div>
-          <div class="mini-stat-val">${fmt(b.wave)}m</div>
-          <div class="mini-stat-lbl">Våg</div>
+      <div class="data-grid">
+
+        <!-- Vind -->
+        <div class="data-cell">
+          <div class="cell-label">Vindstyrka</div>
+          <div class="cell-value big">${fmt(current.wind)}<span style="font-size:0.8rem;font-weight:400;color:var(--muted)"> m/s</span></div>
+          <div class="cell-sub">Byvind: ${fmt(current.windMax)} m/s</div>
         </div>
-        <div class="mini-stat">
-          <div class="mini-stat-icon">⏱️</div>
-          <div class="mini-stat-val">${fmt(b.period,0)}s</div>
-          <div class="mini-stat-lbl">Period</div>
+
+        <!-- Vindriktning + status -->
+        <div class="data-cell" style="border-color:${wsColor}30">
+          <div class="cell-label">Vindläge</div>
+          <div class="cell-value" style="font-size:1rem;color:${wsColor}">${wsLabel}</div>
+          <div class="cell-sub">${dirLabel(current.dir)} ${Math.round(current.dir||0)}°</div>
         </div>
-        <div class="mini-stat">
-          <div class="mini-stat-icon">🌬️</div>
-          <div class="mini-stat-val">${fmt(b.wind)}m/s</div>
-          <div class="mini-stat-lbl">Vind</div>
+
+        <!-- Temperatur -->
+        <div class="data-cell">
+          <div class="cell-label">Lufttemperatur</div>
+          <div class="cell-value">${fmt(current.temp)}<span style="font-size:0.85rem;font-weight:400;color:var(--muted)">°C</span></div>
         </div>
-        <div class="mini-stat">
-          <div class="mini-stat-icon">🌡️</div>
-          <div class="mini-stat-val">${fmt(b.airTemp)}°</div>
-          <div class="mini-stat-lbl">Luft</div>
+
+        <!-- Tid för prognosen -->
+        <div class="data-cell">
+          <div class="cell-label">Prognos</div>
+          <div class="cell-value" style="font-size:1rem">${pad(new Date(current.time).getHours())}:${pad(new Date(current.time).getMinutes())}</div>
+          <div class="cell-sub">${current.time.split('T')[0]}</div>
         </div>
-        <div class="mini-stat">
-          <div class="mini-stat-icon">💧</div>
-          <div class="mini-stat-val">${fmt(b.seaTemp)}°</div>
-          <div class="mini-stat-lbl">Vatten</div>
-        </div>
+
       </div>
 
-      <div class="score-row">
-        <div class="bar-track">
-          <div class="bar-fill bar-${ql.cls}" style="width:${pct}%"></div>
-        </div>
-        <div class="score-num ${ql.cls}">${b.score}</div>
-        <div class="verdict-badge verdict-${ql.cls}">${ql.label}</div>
-      </div>
-
-      ${reasonsHtml}
-
+      <!-- Windspeed sparkline -->
       <div class="sparkline-wrap">
-        ${buildSparkline(r.hourly)}
+        <div class="spark-label">
+          <span>Vindstyrka idag</span>
+          <span style="color:var(--green)">● lugnast</span>
+        </div>
+        ${buildSparkline(hourly, spot.key)}
       </div>
+
     </div>`;
   }).join('');
 }
 
-// ════════════════════════════════════════
-//  RENDER: WAVE PAGE
-// ════════════════════════════════════════
-function renderWavePage(results) {
-  const sorted = [...results].sort((a,b) => (b.best?.score||0) - (a.best?.score||0));
+// ═══════════════════════════════════════════════════
+//  RENDER: WIND PAGE (tabellvy)
+// ═══════════════════════════════════════════════════
+function renderWindPage(results) {
+  const rows = results.map(r => {
+    const { spot, current, calmest } = r;
+    if (!current) return `<tr><td class="spot-col">${spot.label}</td><td colspan="6" style="color:var(--muted)">–</td></tr>`;
 
-  const rows = sorted.map((r, i) => {
-    const b = r.best;
-    if (!b) return `<tr><td class="spot-col">${r.label}</td><td colspan="7" style="color:var(--muted)">–</td></tr>`;
+    const ws = windStatus(current.dir || 0, spot);
+    const dirCls = ws === 'offshore' ? 'wind-ok' : ws === 'onshore' ? 'wind-bad' : 'val';
+    const dirTxt = ws === 'offshore' ? '✓ Offshore' : ws === 'onshore' ? '✗ Onshore' : '~ Sideshore';
+    const calmH  = calmest ? `${pad(new Date(calmest.time).getHours())}:00 (${fmt(calmest.wind)} m/s)` : '–';
 
-    const ql = q(b.score, b.label);
-    const waveBarW = Math.min(60, b.wave * 40);
-    const medals = ['🥇','🥈','🥉','',''];
-
-    return `
-    <tr>
-      <td class="spot-col">${medals[i]} ${r.label}</td>
-      <td class="val">${b.hour.toString().padStart(2,'0')}:00</td>
-      <td>
-        <span class="wave-bar" style="width:${waveBarW}px"></span>
-        <span class="val">${fmt(b.wave)} m</span>
-      </td>
-      <td class="val">${fmt(b.period, 0)} s</td>
-      <td class="val">${fmt(b.wind)} m/s</td>
-      <td class="val">${fmt(b.airTemp)}°C</td>
-      <td class="val">${fmt(b.seaTemp)}°C</td>
-      <td class="score-cell ${ql.cls}">${b.score.toFixed(1)} <span style="font-size:0.6rem;letter-spacing:0.1em">${ql.label}</span></td>
+    return `<tr>
+      <td class="spot-col">${spot.label}</td>
+      <td class="val">${fmt(current.wind)} m/s</td>
+      <td class="val">${fmt(current.windMax)} m/s</td>
+      <td class="val">${dirLabel(current.dir)} ${Math.round(current.dir||0)}°</td>
+      <td class="${dirCls}">${dirTxt}</td>
+      <td class="val">${fmt(current.temp)}°C</td>
+      <td class="val">${calmH}</td>
     </tr>`;
   }).join('');
 
   document.getElementById('wave-content').innerHTML = `
     <div class="wave-table-wrap">
       <table>
-        <thead>
-          <tr>
-            <th>Spot</th>
-            <th>⏰ Bästa tid</th>
-            <th>🌊 Våghöjd</th>
-            <th>⏱ Period</th>
-            <th>🌬️ Vind</th>
-            <th>🌡️ Luft</th>
-            <th>💧 Vatten</th>
-            <th>Score</th>
-          </tr>
-        </thead>
+        <thead><tr>
+          <th>Spot</th>
+          <th>🌬️ Vind</th>
+          <th>💨 Byvind</th>
+          <th>🧭 Riktning</th>
+          <th>Vindläge</th>
+          <th>🌡️ Lufttemp</th>
+          <th>🕐 Lugnast idag</th>
+        </tr></thead>
         <tbody>${rows}</tbody>
       </table>
-    </div>
-
-    <div style="margin-top:28px">
-      <div style="font-family:'Orbitron',sans-serif;font-size:0.72rem;color:var(--muted);letter-spacing:0.14em;text-transform:uppercase;margin-bottom:14px">
-        Våghöjdsfördelning
-      </div>
-      ${sorted.map(r => {
-        if (!r.best) return '';
-        const ql = q(r.best.score, r.best.label);
-        const pct = r.best.score; // 0-100
-        return `
-        <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
-          <div style="font-family:'Orbitron',sans-serif;font-size:0.7rem;color:var(--text);min-width:90px">${r.label}</div>
-          <div style="flex:1;height:9px;background:var(--surface);border-radius:4px;border:1px solid var(--border-dim);overflow:hidden">
-            <div style="width:${pct}%;height:100%;border-radius:4px;background:linear-gradient(90deg,var(--blue-dim),var(--teal))"></div>
-          </div>
-          <div style="font-family:'Orbitron',sans-serif;font-size:0.72rem;color:var(--teal);min-width:42px;text-align:right">${fmt(r.best.wave)} m</div>
-          <div class="verdict-badge verdict-${ql.cls}" style="min-width:58px;text-align:center">${ql.label}</div>
-        </div>`;
-      }).join('')}
     </div>`;
 }
 
-// ════════════════════════════════════════
+// ═══════════════════════════════════════════════════
 //  PAGE NAV
-// ════════════════════════════════════════
+// ═══════════════════════════════════════════════════
 function showPage(id, btn) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
@@ -1382,9 +745,9 @@ function showPage(id, btn) {
   if (btn) btn.classList.add('active');
 }
 
-// ════════════════════════════════════════
+// ═══════════════════════════════════════════════════
 //  INIT
-// ════════════════════════════════════════
+// ═══════════════════════════════════════════════════
 loadAll();
 </script>
 </body>
